@@ -8,6 +8,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This lo
 
 ## [Unreleased]
 
+Post-Milestone-1 dashboard polish, done outside the formal milestone sequence on explicit request. All four items below are **deliberate, logged deviations** from `PRD.md`/`EDRD.md`'s original locked specs (no animation library, monospace-only, no scrolling) — each is documented at its source in `CLAUDE.md`'s Dashboard rules and the relevant `EDRD.md` section, not a silent drift. Milestone 2 work (`PRD.md` §9) has **not** started yet — see `PROJECT_STATUS.md` §4 and the [GitHub issues](https://github.com/vrrroro/ChronOS/issues) for that roadmap.
+
+### Added
+- GSAP (core, vendored locally at `dashboard/vendor/gsap.min.js`, no CDN) for 4 scoped enhancements: panel load-in stagger (replacing the old fixed-delay CSS `@keyframes`), stat-tile count-up/down, subtle Gantt/button hover lift, and smooth playhead motion during playback (instant jump on manual scrub/step, per EDRD §6.1 — the CSS transition this replaced never actually enforced that distinction).
+- CRT-boot intro splash: "CHRONOS" flickers in, brief hold, scanline sweep reveals the dashboard. Initial version used a fixed overlay + timeline; superseded by the scroll-driven version below.
+- Scroll-driven intro rework: the hero is now a real in-flow section pinned via GSAP ScrollTrigger (vendored at `dashboard/vendor/ScrollTrigger.min.js`) for one viewport-height of scroll — the wordmark still flickers in on load, then real scroll position scrubs it out into the dashboard. This is the one place in the app that scrolls; the dashboard itself is unchanged and still needs none once reached (EDRD §4.1 exception).
+- Site-wide Apple-style font: `--font-mono` renamed to `--font-primary`, repointed to `-apple-system, BlinkMacSystemFont, 'Segoe UI', ...` (resolves to San Francisco on macOS/iOS via the OS's own font — SF Pro itself isn't licensable to embed). Applied everywhere, not just prose text.
+- 8 GitHub issues filed for the remaining roadmap (Milestones 2–4), organized under 3 GitHub milestones matching `PRD.md` §9 — see the repo's Issues tab.
+
+### Fixed
+- Intro skip button was scrolling to `hero.offsetHeight` alone, which undercounts once ScrollTrigger's `pin: true` inserts spacer space for the pinned scroll range — landed the viewport in a dead zone between "hero faded out" and "dashboard not yet scrolled into view." Now targets the ScrollTrigger's own resolved `end` position.
+
+---
+
+## [0.4.0] — 2026-08-22 — Milestone 1 (MVP)
+
 ### Added
 - Milestone 0 (Setup): folder scaffold (`engine/`, `engine/schedulers/`, `dashboard/`, `analysis/`, `workloads/`, `results/`, `logs/`), vendored `nlohmann/json` single header, root `CMakeLists.txt`, git repo initialized, CMake toolchain installed.
 - Milestone 1 (MVP): full simulator core (`engine/simulator.{h,cpp}` — tick loop, JSON writer, `logs/scheduler.log` writer), CLI (`engine/main.cpp`), and all 5 required schedulers — FCFS, SJF, Round Robin, Priority (fixed-interval aging), AARS (full §6.1–6.4 scoring formula, dynamic quantum, behavior classification).
@@ -23,7 +39,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This lo
 - Burst-history recording: recording a raw quantum-truncated slice on every preemption capped every recorded burst at AARS's own quantum table (max 8 ticks), making the `CPU_BOUND` classification threshold (avgBurst>15, PRD §6.3) mathematically unreachable regardless of a process's actual CPU appetite. Burst length is now accumulated across same-PID quantum reselections and only recorded as a completed burst when a process is genuinely displaced by a different process, or completes.
 
 ### Known limitation (carried to Milestone 2, per `PRD.md` §14)
-- With the fix above, the classification mechanism is verified correct (confirmed via a scratch sustained-contention scenario), but both required Milestone-1 presets (`cpu_heavy`, `interactive`) still mostly classify `UNKNOWN` in practice: `UNKNOWN` is the PRD §6.3 catch-all whenever avgBurst falls between the IO/interactive threshold (4) and the CPU-bound threshold (15), and AARS's own quantum table (2–8 ticks) tends to produce recorded bursts that land in exactly that middle zone. This is a threshold-vs-quantum interaction, not a bug — real data for retuning §6.2/6.3 thresholds is exactly what Milestone 2 (`PRD.md` §9, item 3) is for.
+- With the fix above, the classification mechanism is verified correct (confirmed via a scratch sustained-contention scenario), but both required Milestone-1 presets (`cpu_heavy`, `interactive`) still mostly classify `UNKNOWN` in practice: `UNKNOWN` is the PRD §6.3 catch-all whenever avgBurst falls between the IO/interactive threshold (4) and the CPU-bound threshold (15), and AARS's own quantum table (2–8 ticks) tends to produce recorded bursts that land in exactly that middle zone. This is a threshold-vs-quantum interaction, not a bug — real data for retuning §6.2/6.3 thresholds is exactly what Milestone 2 (`PRD.md` §9, item 3) is for. Tracked as [GitHub issue #3](https://github.com/vrrroro/ChronOS/issues/3).
 
 ---
 

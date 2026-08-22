@@ -13,12 +13,13 @@
 | | |
 |---|---|
 | Time elapsed | Milestone 0 + 1 of 4–6 weeks |
-| Milestone | Milestone 1 (MVP) complete — Milestone 2 next |
+| Milestone | Milestone 1 (MVP) complete — Milestone 2 next (not started) |
 | Engine | Working — FCFS, SJF, RR, Priority, AARS all implemented, built, and verified |
-| Dashboard | Working — full EDRD.md spec, verified against real engine output in-browser |
+| Dashboard | Working — EDRD.md spec plus post-M1 polish (GSAP animations, scroll-driven intro, site-wide Apple-style font) — see §2/§6, all logged deviations |
 | Analysis | Not started (Milestone 2 scope) |
 | Blockers | None |
-| Docs | Complete — `PRD.md`, `EDRD.md`, `ARCHITECTURE.md`, `CLAUDE.md`, `CHANGELOG.md` |
+| Docs | Complete — `PRD.md`, `EDRD.md`, `ARCHITECTURE.md`, `CLAUDE.md`, `CHANGELOG.md`, `README.md` |
+| Roadmap tracking | [GitHub Issues](https://github.com/vrrroro/ChronOS/issues) — 8 issues across 3 milestones (M2/M3/M4), mirrors §4/§7 below |
 
 ---
 
@@ -31,18 +32,26 @@
 - [x] Project renamed ChronosOS → ChronOS across all docs
 - [x] Change history established (`CHANGELOG.md`)
 - [x] Milestone 0 (Setup): toolchain, folder scaffold, `Process`/`State`/`ProcessClass`, fake `results.json`, dashboard skeleton rendering it
-- [x] Milestone 1 (MVP): simulator core, all 5 schedulers (FCFS/SJF/RR/Priority/AARS), full dashboard, 2 workload presets — see `CHANGELOG.md` `[Unreleased]` for details
+- [x] Milestone 1 (MVP): simulator core, all 5 schedulers (FCFS/SJF/RR/Priority/AARS), full dashboard, 2 workload presets — see `CHANGELOG.md` `[0.4.0]` for details
+- [x] Post-M1 dashboard polish (explicit request, outside the formal milestone sequence — see `CHANGELOG.md` `[Unreleased]`, all logged as deliberate deviations in `CLAUDE.md`/`EDRD.md`):
+  - GSAP animations (panel load-in, stat-tile counters, hover lift, playhead motion) — vendored locally, no CDN
+  - Real scroll-driven intro splash (GSAP ScrollTrigger, vendored) — the one place in the app that scrolls; dashboard itself still needs none
+  - Site-wide Apple-style system font (`--font-primary`), replacing the original monospace-only identity
+- [x] 8 GitHub issues filed for the Milestone 2–4 roadmap, organized under 3 GitHub milestones — https://github.com/vrrroro/ChronOS/issues
 
 ## 3. What's in progress
 
-Nothing — between milestones.
+Nothing — between milestones. (The post-M1 polish above is done, not in-progress.)
 
 ## 4. What's next (Milestone 2 — Comparison & polish, `PRD.md` §9)
 
-- [ ] `analysis/analysis.py`: read multiple result JSONs, build comparison table, generate the 4 charts from PRD §8.2
-- [ ] Remaining workload presets: `mixed`, `starvation` stress test
-- [ ] Retune AARS thresholds (PRD §6.2/6.3) against real data — see open question below, already known to matter
-- [ ] Basic logging cleanup if anything's missing beyond the existing `decisionLog`/`scheduler.log`
+Tracked as GitHub issues (linked) — this list mirrors them, but the issues are the source of truth if the two ever drift:
+
+- [ ] [#1](https://github.com/vrrroro/ChronOS/issues/1) `analysis/analysis.py`: read multiple result JSONs, build comparison table, generate the 4 charts from PRD §8.2
+- [ ] [#2](https://github.com/vrrroro/ChronOS/issues/2) Remaining workload presets: `mixed`, `starvation` stress test
+- [ ] [#3](https://github.com/vrrroro/ChronOS/issues/3) Retune AARS thresholds (PRD §6.2/6.3) against real data — see open question below, already known to matter
+
+Milestone 3 ([#4](https://github.com/vrrroro/ChronOS/issues/4) MLFQ, [#5](https://github.com/vrrroro/ChronOS/issues/5) AARS arrival-triggered preemption) and Milestone 4 ([#6](https://github.com/vrrroro/ChronOS/issues/6) stretch goal, [#7](https://github.com/vrrroro/ChronOS/issues/7) edge-case tests, [#8](https://github.com/vrrroro/ChronOS/issues/8) presentation prep) come after.
 
 ---
 
@@ -69,10 +78,11 @@ Nothing — between milestones.
 | `engine/schedulers/aars.cpp` | Done | full §6.1–6.4 formula, honest weights, not retuned |
 | `engine/schedulers/mlfq.cpp` | Not started (Milestone 3) | |
 | `engine/simulator.*` | Done | |
-| `dashboard/index.html` / `style.css` / `app.js` | Done | |
-| `analysis/analysis.py` | Not started (Milestone 2) | |
-| `workloads/*.json` presets | 2 of 4 done | `cpu_heavy`, `interactive` done; need `mixed`, `starvation` |
-| `CMakeLists.txt` | Done | |
+| `dashboard/index.html` / `style.css` / `app.js` | Done | + post-M1 polish: GSAP animations, scroll-driven intro, Apple-style font (all logged deviations) |
+| `dashboard/vendor/gsap.min.js` + `ScrollTrigger.min.js` | Done | vendored locally, no CDN, per the offline-demo-safety convention already used for `engine/vendor/json.hpp` |
+| `analysis/analysis.py` | Not started (Milestone 2 — [#1](https://github.com/vrrroro/ChronOS/issues/1)) | |
+| `workloads/*.json` presets | 2 of 4 done | `cpu_heavy`, `interactive` done; need `mixed`, `starvation` ([#2](https://github.com/vrrroro/ChronOS/issues/2)) |
+| `CMakeLists.txt` | Done | needs `-G "MinGW Makefiles"` on this machine — see `CLAUDE.md` Commands |
 
 ---
 
@@ -80,7 +90,7 @@ Nothing — between milestones.
 
 Carried from `PRD.md` §14 — revisit once real data exists:
 
-- [ ] Do the AARS weight thresholds (`PRD.md` §6.2/6.3) actually separate workloads well, or do they need retuning? **Now has real data**: both Milestone-1 presets classify almost entirely `UNKNOWN` in practice — not a mechanism bug (verified working via a scratch contention test), but because avgBurst tends to land between the IO/interactive threshold (4) and the CPU-bound threshold (15), given AARS's own quantum table caps most recorded bursts at 2–8. This is the first concrete candidate for Milestone 2 retuning.
+- [ ] Do the AARS weight thresholds (`PRD.md` §6.2/6.3) actually separate workloads well, or do they need retuning? **Now has real data**: both Milestone-1 presets classify almost entirely `UNKNOWN` in practice — not a mechanism bug (verified working via a scratch contention test), but because avgBurst tends to land between the IO/interactive threshold (4) and the CPU-bound threshold (15), given AARS's own quantum table caps most recorded bursts at 2–8. This is the first concrete candidate for Milestone 2 retuning. Tracked as [#3](https://github.com/vrrroro/ChronOS/issues/3).
 - [ ] Is the 4–6 week estimate holding once Milestone 0/1 actual time-spent is known?
 - [ ] Which single stretch goal (`PRD.md` §6.5), if any, is worth pursuing in Milestone 4?
 

@@ -7,7 +7,8 @@ Project: ChronOS — Adaptive CPU Scheduling Engine (AARS algorithm). Full spec:
 - Simulation engine: C++17, STL only. No Boost, no external C++ libs except `nlohmann/json` (single header).
 - Build: CMake.
 - Dashboard: plain HTML/CSS/JS. No React/Vue/Svelte/any framework. No build step (no webpack/vite/npm bundling for the dashboard itself).
-- Charting in dashboard: Chart.js via `<script>` tag only.
+- Charting in dashboard: Chart.js via `<script>` tag only — in practice never adopted; nothing in the dashboard ended up needing it (Gantt/score-bar are custom CSS/DOM, EDRD §5.2/§5.4). Don't reach for it without checking whether the thing you're building actually needs a charting library first.
+- GSAP is the one animation-library exception — see Dashboard rules below. It is not a general green light for other JS libraries.
 - Analysis: Python 3 + matplotlib + pandas.
 - No database. No backend server, live socket, or REST API anywhere in the MVP/Milestone 1-2 scope (see PRD 2.2).
 
@@ -31,6 +32,7 @@ Project: ChronOS — Adaptive CPU Scheduling Engine (AARS algorithm). Full spec:
 - Jet black + neon green terminal aesthetic is fixed. No light theme, no theme toggle, no alternate color schemes.
 - **Deliberate exception (post-Milestone-1, logged decision — see EDRD §3.1's "Logged deviation" note):** the site is no longer monospace-only. `--font-primary` is a system-UI stack (`-apple-system, BlinkMacSystemFont, ...`) resolving to San Francisco on Apple devices, used everywhere — this was an explicit, deliberate override of the original monospace-only rule (which went further than the EDRD-anticipated "prose-only sans-serif" fallback), not a silent drift. Do not embed/redistribute the actual SF Pro font files — the system-font-stack approach is the only license-compliant way to reference it.
 - Dashboard replays a static JSON file (play/pause/step/scrub). It does not stream live from a running process.
+- **Deliberate exception (post-Milestone-1, logged decision — see EDRD §9):** the dashboard is no longer strictly scroll-free. A real, scroll-driven intro splash (GSAP ScrollTrigger, vendored at `dashboard/vendor/ScrollTrigger.min.js`) precedes the three-zone layout — the one place in the app that scrolls. The operational dashboard itself, once reached, is unchanged: still needs no scrolling, per EDRD §4.1's original reasoning (nothing to lose track of during a live demo).
 
 ## What NOT to do
 
@@ -40,7 +42,7 @@ Project: ChronOS — Adaptive CPU Scheduling Engine (AARS algorithm). Full spec:
 - Do not add a persistent database.
 - Do not build MLFQ before Milestones 0-2 are complete and working.
 - Do not make the dashboard responsive/mobile-first. Target laptop screens ≥1280px only (EDRD §1.2, §8.3).
-- Do not add animation/icon libraries. Plain CSS transitions/keyframes and inline SVG/unicode glyphs only (EDRD §8.3).
+- Do not add icon libraries — inline SVG/unicode glyphs only (EDRD §8.3). Animation libraries: see the logged GSAP exception in Dashboard rules above — that's the one already-approved deviation, not a general opening. Don't add a second animation library, and don't expand GSAP past its 4 approved moments plus the intro splash without another explicit, logged decision.
 - Do not hardcode example/illustrative metrics anywhere in code, docs, or generated reports. All numbers in `results/`, comparison tables, and charts must come from actual simulation runs.
 - Do not silently change the JSON schema, folder structure (PRD §4.2), or CMake target layout without flagging the change.
 - Do not skip the fake-JSON-first step in Milestone 0 — build/verify the dashboard against a hand-written sample `results.json` before wiring it to the real engine output.

@@ -211,10 +211,13 @@ See `PRD.md` §5.3 for the full shape. Field-by-field ownership:
 dashboard/
 ├── index.html      structure only — panel containers, no inline logic
 ├── style.css       all EDRD.md tokens + component styles
-└── app.js          state, rendering, playback control
+├── app.js          state, rendering, playback control
+└── vendor/
+    ├── gsap.min.js            GSAP core (logged deviation — EDRD.md §8.3)
+    └── ScrollTrigger.min.js   GSAP plugin, intro splash only (EDRD.md §9)
 ```
 
-No build step, no bundler — `app.js` is loaded directly via `<script src="app.js">`. Chart.js loaded via CDN `<script>` tag (or a locally vendored copy for offline demo safety — recommended, since a live demo shouldn't depend on network access).
+No build step, no bundler — `app.js` is loaded directly via `<script src="app.js">`. Chart.js was never actually adopted: nothing in the Milestone-1 dashboard needs it (the Gantt chart and why-panel's score-breakdown bar are custom CSS/DOM per EDRD.md §5.2/§5.4, not Chart.js charts) — that call was made during Milestone 1 build-out and is worth a heads-up before reaching for it in Milestone 2's `analysis.py` charts, which are matplotlib-rendered images anyway, not a dashboard concern. GSAP (core + ScrollTrigger) *was* adopted, post-Milestone-1, as a logged exception — vendored locally per the same offline-demo-safety principle this paragraph already argued for Chart.js.
 
 ### 5.2 `app.js` state model
 

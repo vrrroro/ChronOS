@@ -153,6 +153,8 @@ Slot 1 (`#39FF14`) is both the RUNNING-state color and a process palette color, 
 
 Single-page dashboard, no scrolling required at 1440×900 or larger (scrolling acceptable below that). Three-zone vertical layout:
 
+> ✎ **Logged deviation (post-Milestone-1, explicit request):** an intro splash section now precedes this three-zone layout — see the new §9 below. It's the one place in the app that scrolls (real, user-driven scroll, not just "acceptable below 1440×900" — required at any size). The three-zone dashboard itself, once reached, is unchanged: still fits without scrolling exactly as this section originally specified.
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  ZONE A — Top bar (fixed height, ~72px)                  │
@@ -420,3 +422,26 @@ All tokens in Sections 2–4 should be declared once as CSS custom properties on
 Consistent with the PRD's own non-goals: no responsive/mobile breakpoints beyond "don't break above 1280px," no dark/light theme toggle (jet-black is the only theme), no icon library dependency (use inline SVG or unicode glyphs to avoid adding a font-icon build dependency).
 
 > ✎ **Logged deviation (post-Milestone-1):** the "no animation library dependency" rule above was deliberately overridden, on explicit request, for 4 specific enhancements: panel load-in stagger, stat-tile number counters, Gantt/button hover micro-interactions, and playhead motion. GSAP is vendored locally (no CDN, per the offline-demo-safety note in `ARCHITECTURE.md` §5.1). Every other panel/interaction in Section 6 is still plain CSS, and any GSAP timing must stay within this section's "fast and purposeful" principle — `power1`/`power2` easings only, no bounce/elastic/overshoot (those read as sloppy on dense informational UI, not as polish). See `CLAUDE.md`'s Dashboard rules for the enforcement note.
+
+---
+
+## 9. Intro splash (post-Milestone-1 addendum — logged deviation)
+
+Not part of the original spec — added on explicit request, after Milestone 1 shipped. Documented here so this file still describes the dashboard as it actually is. The font override (§3.1) and GSAP (§8.3) both apply everywhere by this point, including here; what's specific to this section is that it's the one place in the app that's scroll-driven.
+
+### 9.1 Structure
+
+`<section id="intro-hero">` sits before the dashboard (`#app`) in document flow, full-bleed (negative-margined out of `body`'s padding), `height: 100vh`. Contains: the CHRONOS wordmark (reuses the top bar's glow treatment, larger — `text-shadow: 0 0 16px rgba(57,255,20,0.6), 0 0 40px rgba(57,255,20,0.25)`), the subtitle line, a thin scanline bar, and a skip hint.
+
+### 9.2 Sequence
+
+1. **Entrance** (time-based, plays once on load, independent of scroll): the wordmark flickers — a few quick opacity stutters (evoking a CRT power-on) before settling at full glow — then the subtitle fades in, then the skip hint fades in and starts a slow pulse (reuses the existing `status-pulse` keyframe from §6.5's status dot — same restrained vocabulary, not a new pattern).
+2. **Exit** (real scroll-driven, GSAP ScrollTrigger, `pin: true`, `scrub: 0.5`, one viewport-height of scroll range): wordmark scales down and fades, subtitle and skip hint fade, the scanline sweeps top-to-bottom, the hero itself fades — releasing the pin and handing off to the dashboard, which then plays its own existing boot reveal (§6.7) for the first time, sequenced to start only once the hero is actually scrolled past.
+
+### 9.3 Skip + accessibility
+
+Click or any keypress skips — scrolls (smoothly) straight to where the dashboard actually starts. This must target the ScrollTrigger's own resolved end position, not the hero's bare height: `pin: true` inserts spacer space for the whole pinned scroll range, so the dashboard's real document position is further down than the hero's own height alone would suggest. `prefers-reduced-motion` skips the pin/scrub/flicker entirely — hero renders as a plain static section, scrolled past normally.
+
+### 9.4 Why this doesn't undermine §4.1's "no scrolling" principle
+
+§4.1's no-scroll rule is about the *operational* dashboard — the thing a viewer watches during a live demo/viva, per its own stated reasoning (nothing to lose track of if the projector Wi-Fi is flaky, etc.). The intro is a one-time, skippable entry sequence, not part of that operational surface. Once past it, the dashboard is exactly as before: no scrolling needed.
