@@ -54,23 +54,26 @@ Project: ChronOS — Adaptive CPU Scheduling Engine (AARS algorithm). Full spec:
 
 ```bash
 # Configure + build (from repo root)
-cmake -S . -B build
+# On this machine, bare `cmake -S . -B build` picks NMake (needs MSVC) as its
+# default generator even though the toolchain is MSYS2/UCRT64 g++ — pass the
+# generator explicitly, or CMakeCache.txt locks in the wrong one.
+cmake -S . -B build -G "MinGW Makefiles"
 cmake --build build
 
 # Run simulator (produces results/<name>.json)
-./build/engine/chronos --algorithm <fcfs|sjf|rr|priority|mlfq|aars> --workload workloads/<name>.json --out results/<name>.json
+./build/engine/chronos --algorithm <fcfs|sjf|rr|priority|aars> --workload workloads/<name>.json --out results/<name>.json
 
 # Open dashboard (static, no server)
 open dashboard/index.html    # or just double-click / drag into browser
 
-# Run comparison analysis
+# Run comparison analysis (Milestone 2 — analysis/analysis.py not yet built)
 python3 analysis/analysis.py results/*.json
 
 # Format C++ (if clang-format config exists)
 clang-format -i engine/**/*.cpp engine/**/*.h
 ```
 
-> ✎ Adjust binary name/CLI flags above once `main.cpp`'s actual argument parsing is written — this is a starting convention, not yet verified against real code.
+Verified against real `main.cpp` as of Milestone 1 — CLI flags/binary name above are accurate, not a placeholder.
 
 ## File layout
 

@@ -8,7 +8,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This lo
 
 ## [Unreleased]
 
-Nothing yet — implementation has not started. First entries should land here as Milestone 0 begins (`PRD.md` §9).
+### Added
+- Milestone 0 (Setup): folder scaffold (`engine/`, `engine/schedulers/`, `dashboard/`, `analysis/`, `workloads/`, `results/`, `logs/`), vendored `nlohmann/json` single header, root `CMakeLists.txt`, git repo initialized, CMake toolchain installed.
+- Milestone 1 (MVP): full simulator core (`engine/simulator.{h,cpp}` — tick loop, JSON writer, `logs/scheduler.log` writer), CLI (`engine/main.cpp`), and all 5 required schedulers — FCFS, SJF, Round Robin, Priority (fixed-interval aging), AARS (full §6.1–6.4 scoring formula, dynamic quantum, behavior classification).
+- Full dashboard (`dashboard/index.html`/`style.css`/`app.js`) per `EDRD.md`: CPU timeline/Gantt with playhead, ready queue table, why-panel with score-breakdown bar, waiting/aging indicator, playback controls, algorithm/workload picker.
+- 2 workload presets (`cpu_heavy.json`, `interactive.json`) producing visibly different Gantt shapes.
+
+### Changed
+- `PRD.md` §5.3: extended `decisionLog[].candidates[]` from `{pid, score}` to also carry `priority`, `burstRemaining`, `class` — the ready-queue table (EDRD §5.3) needed a per-tick source for those columns that the original schema had nowhere to carry. All 5 schedulers populate it, not just AARS.
+
+### Fixed
+- Structural bug in `ARCHITECTURE.md` §3.3's pseudocode: `selectNext` was called before the just-preempted process was pushed back into `readyQueue`, making it impossible for a quantum-based scheduler to ever reselect the same process when it's the only one ready. `simulator.cpp` pushes back first, then selects.
+- Context-switch undercounting: switches were only being counted on mid-slice preemption, not when one process completes and a different one starts next.
+- Burst-history recording: recording a raw quantum-truncated slice on every preemption capped every recorded burst at AARS's own quantum table (max 8 ticks), making the `CPU_BOUND` classification threshold (avgBurst>15, PRD §6.3) mathematically unreachable regardless of a process's actual CPU appetite. Burst length is now accumulated across same-PID quantum reselections and only recorded as a completed burst when a process is genuinely displaced by a different process, or completes.
+
+### Known limitation (carried to Milestone 2, per `PRD.md` §14)
+- With the fix above, the classification mechanism is verified correct (confirmed via a scratch sustained-contention scenario), but both required Milestone-1 presets (`cpu_heavy`, `interactive`) still mostly classify `UNKNOWN` in practice: `UNKNOWN` is the PRD §6.3 catch-all whenever avgBurst falls between the IO/interactive threshold (4) and the CPU-bound threshold (15), and AARS's own quantum table (2–8 ticks) tends to produce recorded bursts that land in exactly that middle zone. This is a threshold-vs-quantum interaction, not a bug — real data for retuning §6.2/6.3 thresholds is exactly what Milestone 2 (`PRD.md` §9, item 3) is for.
 
 ---
 
