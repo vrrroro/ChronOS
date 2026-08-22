@@ -1,0 +1,14 @@
+{
+  "name": "Interactive Workload",
+  "quantum": 3,
+  "processes": [
+    { "pid": 1, "arrivalTime": 0, "burstTime": 2, "priority": 5 },
+    { "pid": 2, "arrivalTime": 1, "burstTime": 3, "priority": 6 },
+    { "pid": 3, "arrivalTime": 2, "burstTime": 1, "priority": 5 },
+    { "pid": 4, "arrivalTime": 4, "burstTime": 2, "priority": 7 },
+    { "pid": 5, "arrivalTime": 6, "burstTime": 3, "priority": 4 },
+    { "pid": 6, "arrivalTime": 8, "burstTime": 2, "priority": 6 },
+    { "pid": 7, "arrivalTime": 10, "burstTime": 1, "priority": 5 },
+    { "pid": 8, "arrivalTime": 12, "burstTime": 3, "priority": 5 }
+  ]
+}

@@ -1,0 +1,6 @@
+# Generated output and local config
+results/
+logs/
+build/
+analysis/output/
+.env

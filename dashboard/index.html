@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChronOS — Adaptive CPU Scheduling Engine</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app" class="app">
+
+  <!-- ZONE A — Top bar -->
+  <header class="topbar panel-anim" id="topbar">
+    <div class="topbar-brand">
+      <div class="wordmark">CHRONOS</div>
+      <div class="subtitle">Adaptive CPU Scheduling Engine</div>
+    </div>
+
+    <div class="topbar-run-info">
+      <div class="run-info-item">
+        <span class="text-label">ALGORITHM</span>
+        <span class="text-data" id="run-algorithm">—</span>
+      </div>
+      <div class="run-info-item">
+        <span class="text-label">WORKLOAD</span>
+        <span class="text-data" id="run-workload">—</span>
+      </div>
+    </div>
+
+    <div class="stat-tiles">
+      <div class="stat-tile">
+        <span class="text-label">CPU</span>
+        <span class="text-data-lg" id="stat-cpu">0%</span>
+        <div class="stat-bar"><div class="stat-bar-fill" id="stat-cpu-bar"></div></div>
+      </div>
+      <div class="stat-tile-divider"></div>
+      <div class="stat-tile">
+        <span class="text-label">PROCESSES</span>
+        <span class="text-data-lg" id="stat-processes">0</span>
+      </div>
+      <div class="stat-tile-divider"></div>
+      <div class="stat-tile">
+        <span class="text-label">CONTEXT SWITCHES</span>
+        <span class="text-data-lg" id="stat-switches">0</span>
+      </div>
+    </div>
+
+    <div class="status-pill" id="status-pill">
+      <span class="status-dot" id="status-dot"></span>
+      <span id="status-text">NO SIMULATION LOADED</span>
+    </div>
+  </header>
+
+  <!-- ZONE B — Main grid -->
+  <main class="main-grid">
+
+    <!-- Empty state overlay, shown before any JSON is loaded -->
+    <div class="empty-state panel-anim" id="empty-state">
+      <div class="empty-state-scanline"></div>
+      <p>No simulation loaded. Choose an algorithm and workload below, then press RUN.</p>
+    </div>
+
+    <div class="main-grid-inner" id="main-grid-inner" hidden>
+
+      <!-- Left column -->
+      <div class="col-left">
+        <section class="panel panel-anim" id="panel-gantt">
+          <div class="panel-header">
+            <span class="panel-icon">▸</span>
+            <span class="panel-title">CPU TIMELINE</span>
+          </div>
+          <div class="panel-body panel-body-gantt">
+            <div class="gantt-scroll" id="gantt-scroll">
+              <div class="gantt-track" id="gantt-track">
+                <div class="gantt-playhead" id="gantt-playhead"><div class="playhead-flag"></div></div>
+              </div>
+              <div class="gantt-ruler" id="gantt-ruler"></div>
+            </div>
+            <div class="gantt-tooltip" id="gantt-tooltip" hidden></div>
+          </div>
+        </section>
+
+        <section class="panel panel-anim" id="panel-playback">
+          <div class="panel-body panel-body-playback">
+            <div class="playback-controls">
+              <button class="btn" id="btn-step-back" title="Step back" aria-label="Step back">⏮</button>
+              <button class="btn btn-primary" id="btn-play-pause" title="Play / Pause" aria-label="Play or pause">▶</button>
+              <button class="btn" id="btn-step-fwd" title="Step forward" aria-label="Step forward">⏭</button>
+              <button class="btn" id="btn-reset" title="Reset" aria-label="Reset">🔁</button>
+
+              <div class="speed-control" id="speed-control" role="group" aria-label="Playback speed">
+                <button class="speed-btn" data-speed="0.5">0.5×</button>
+                <button class="speed-btn is-active" data-speed="1">1×</button>
+                <button class="speed-btn" data-speed="2">2×</button>
+                <button class="speed-btn" data-speed="4">4×</button>
+              </div>
+
+              <div class="tick-readout">
+                TICK <span id="tick-readout">0</span> / <span id="tick-max">0</span>
+              </div>
+            </div>
+            <div class="scrub-bar" id="scrub-bar">
+              <div class="scrub-track"></div>
+              <div class="scrub-fill" id="scrub-fill"></div>
+              <div class="scrub-thumb" id="scrub-thumb"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Right column -->
+      <div class="col-right">
+        <section class="panel panel-anim" id="panel-ready-queue">
+          <div class="panel-header">
+            <span class="panel-icon">▪</span>
+            <span class="panel-title">READY QUEUE</span>
+          </div>
+          <div class="panel-body">
+            <table class="ready-queue-table">
+              <thead>
+                <tr id="ready-queue-head">
+                  <th class="text-label">PID</th>
+                  <th class="text-label">PRIORITY</th>
+                  <th class="text-label">BURST</th>
+                  <th class="text-label">WAIT</th>
+                  <th class="text-label" id="col-score">SCORE</th>
+                  <th class="text-label">CLASS</th>
+                </tr>
+              </thead>
+              <tbody id="ready-queue-body"></tbody>
+            </table>
+            <p class="ready-queue-empty" id="ready-queue-empty">No processes currently ready.</p>
+          </div>
+        </section>
+
+        <section class="panel panel-anim" id="panel-why">
+          <div class="panel-header">
+            <span class="panel-icon">⏱</span>
+            <span class="panel-title">WHY THIS PROCESS?</span>
+          </div>
+          <div class="panel-body" id="why-panel-body">
+            <p class="why-empty" id="why-empty">Awaiting first scheduling decision…</p>
+            <div class="why-content" id="why-content" hidden>
+              <div class="why-header" id="why-header"></div>
+              <ul class="why-reasons" id="why-reasons"></ul>
+              <div class="why-footer">
+                <div class="why-score-label">FINAL SCORE</div>
+                <div class="why-score-value" id="why-score-value">—</div>
+                <div class="why-score-bar" id="why-score-bar"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel panel-anim" id="panel-aging">
+          <div class="panel-header">
+            <span class="panel-icon">⚠</span>
+            <span class="panel-title">WAITING / AGING</span>
+          </div>
+          <div class="panel-body">
+            <ul class="aging-list" id="aging-list"></ul>
+            <p class="aging-empty" id="aging-empty">No processes accumulating aging bonus.</p>
+          </div>
+        </section>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ZONE C — Footer / algorithm & workload picker -->
+  <footer class="footer panel-anim">
+    <div class="picker-group">
+      <label class="picker">
+        <span class="text-label">ALGORITHM</span>
+        <select id="picker-algorithm">
+          <option value="fcfs">FCFS</option>
+          <option value="sjf">SJF</option>
+          <option value="rr">Round Robin</option>
+          <option value="priority">Priority</option>
+          <option value="aars" selected>AARS</option>
+        </select>
+      </label>
+      <label class="picker">
+        <span class="text-label">WORKLOAD</span>
+        <select id="picker-workload">
+          <option value="cpu_heavy">CPU-Heavy</option>
+          <option value="interactive" selected>Interactive</option>
+          <option value="mixed">Mixed</option>
+          <option value="starvation">Starvation</option>
+        </select>
+      </label>
+    </div>
+    <button class="btn btn-primary btn-run" id="btn-run">RUN</button>
+    <input type="file" id="file-input" accept="application/json,.json" hidden>
+  </footer>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

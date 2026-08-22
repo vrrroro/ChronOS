@@ -1,0 +1,49 @@
+{
+  "algorithm": "AARS",
+  "workloadName": "Interactive Workload (sample)",
+  "gantt": [
+    { "pid": 1, "start": 0, "end": 4, "reason": "Highest score: new process, response bonus" },
+    { "pid": 2, "start": 4, "end": 7, "reason": "Highest score: high base priority + response bonus" },
+    { "pid": 3, "start": 7, "end": 12, "reason": "Only ready process remaining" }
+  ],
+  "decisionLog": [
+    {
+      "tick": 0,
+      "chosen": 1,
+      "candidates": [
+        { "pid": 1, "score": 8.0, "priority": 5, "burstRemaining": 4, "class": "UNKNOWN" }
+      ],
+      "reasonTags": ["only_candidate", "base_priority:+5", "aging_bonus:+0", "io_bonus:+0", "response_bonus:+3", "cpu_burst_penalty:0"]
+    },
+    {
+      "tick": 4,
+      "chosen": 2,
+      "candidates": [
+        { "pid": 2, "score": 11.5, "priority": 7, "burstRemaining": 3, "class": "UNKNOWN" },
+        { "pid": 3, "score": 7.0, "priority": 3, "burstRemaining": 5, "class": "UNKNOWN" }
+      ],
+      "reasonTags": ["highest_score", "base_priority:+7", "aging_bonus:+1.5", "io_bonus:+0", "response_bonus:+3", "cpu_burst_penalty:0"]
+    },
+    {
+      "tick": 7,
+      "chosen": 3,
+      "candidates": [
+        { "pid": 3, "score": 8.5, "priority": 3, "burstRemaining": 5, "class": "UNKNOWN" }
+      ],
+      "reasonTags": ["only_candidate", "base_priority:+3", "aging_bonus:+2.5", "io_bonus:+0", "response_bonus:+3", "cpu_burst_penalty:0"]
+    }
+  ],
+  "processStats": [
+    { "pid": 1, "waitingTime": 0, "turnaroundTime": 4, "responseTime": 0, "completionTime": 4 },
+    { "pid": 2, "waitingTime": 3, "turnaroundTime": 6, "responseTime": 3, "completionTime": 7 },
+    { "pid": 3, "waitingTime": 5, "turnaroundTime": 10, "responseTime": 5, "completionTime": 12 }
+  ],
+  "summary": {
+    "avgWaitingTime": 2.667,
+    "avgTurnaroundTime": 6.667,
+    "avgResponseTime": 2.667,
+    "contextSwitches": 2,
+    "cpuUtilization": 1.0,
+    "throughput": 0.25
+  }
+}

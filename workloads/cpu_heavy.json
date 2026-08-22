@@ -1,0 +1,11 @@
+{
+  "name": "CPU-Heavy Workload",
+  "quantum": 8,
+  "processes": [
+    { "pid": 1, "arrivalTime": 0, "burstTime": 22, "priority": 5 },
+    { "pid": 2, "arrivalTime": 1, "burstTime": 18, "priority": 6 },
+    { "pid": 3, "arrivalTime": 2, "burstTime": 25, "priority": 4 },
+    { "pid": 4, "arrivalTime": 3, "burstTime": 16, "priority": 7 },
+    { "pid": 5, "arrivalTime": 5, "burstTime": 20, "priority": 5 }
+  ]
+}

@@ -1,0 +1,562 @@
+/* ChronOS dashboard — EDRD.md §8.1 tokens verbatim */
+:root {
+  /* Base */
+  --bg-void: #000000;
+  --bg-panel: #0A0F0A;
+  --bg-panel-raised: #0F1A0F;
+  --bg-inset: #050805;
+  --border-default: #1A3D1A;
+  --border-active: #39FF14;
+  --text-primary: #39FF14;
+  --text-secondary: #8FE68F;
+  --text-dim: #3D5C3D;
+  --text-on-accent: #000000;
+
+  /* Status */
+  --state-running: #39FF14;
+  --state-ready: #8FE68F;
+  --state-waiting: #FFD23F;
+  --state-terminated: #3D5C3D;
+  --state-new: #1A3D1A;
+
+  /* Semantic accents */
+  --accent-positive: #39FF14;
+  --accent-negative: #FF3E5C;
+  --accent-warning: #FFD23F;
+  --accent-info: #0FF0FC;
+
+  /* Process palette */
+  --proc-1: #39FF14;
+  --proc-2: #0FF0FC;
+  --proc-3: #FF3EC9;
+  --proc-4: #FFB300;
+  --proc-5: #3E9EFF;
+  --proc-6: #FF5C33;
+  --proc-7: #B15CFF;
+  --proc-8: #D4FF3E;
+
+  /* Motion */
+  --transition-fast: 100ms ease-out;
+  --transition-base: 180ms ease-out;
+  --transition-slow: 300ms ease-out;
+
+  /* Font */
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', Consolas, 'Courier New', monospace;
+
+  /* Type scale — EDRD §3.2 */
+  --text-display: 28px;
+  --text-h1: 20px;
+  --text-h2: 15px;
+  --text-body: 14px;
+  --text-data: 14px;
+  --text-data-lg: 22px;
+  --text-label: 11px;
+  --text-mono-code: 13px;
+
+  /* Spacing — EDRD §4.2 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 32px;
+}
+
+* { box-sizing: border-box; }
+
+[hidden] { display: none !important; }
+
+html, body {
+  background: var(--bg-void);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  margin: 0;
+  padding: 0;
+  min-width: 1280px;
+}
+
+body { padding: var(--space-4); }
+
+.text-label {
+  font-size: var(--text-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+
+.text-data { font-size: var(--text-data); font-weight: 500; color: var(--text-secondary); }
+.text-data-lg { font-size: var(--text-data-lg); font-weight: 700; color: var(--text-primary); line-height: 1.2; }
+
+.app {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* ---------------------------------------------------------------- */
+/* Panel anatomy — EDRD §4.3 */
+/* ---------------------------------------------------------------- */
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-panel);
+}
+
+.panel-icon { color: var(--text-primary); font-size: 13px; }
+
+.panel-title {
+  font-size: var(--text-h1);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.panel-body { padding: var(--space-3); }
+
+/* Panel load-in — EDRD §6.7 */
+.panel-anim {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: panel-load-in var(--transition-slow) forwards;
+}
+.topbar.panel-anim { animation-delay: 0ms; }
+#empty-state.panel-anim { animation-delay: 40ms; }
+#panel-gantt.panel-anim { animation-delay: 80ms; }
+#panel-playback.panel-anim { animation-delay: 100ms; }
+#panel-ready-queue.panel-anim { animation-delay: 120ms; }
+#panel-why.panel-anim { animation-delay: 160ms; }
+#panel-aging.panel-anim { animation-delay: 200ms; }
+.footer.panel-anim { animation-delay: 240ms; }
+
+@keyframes panel-load-in {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------------------------------------------------------------- */
+/* Zone A — Top bar — EDRD §5.1 */
+/* ---------------------------------------------------------------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  min-height: 72px;
+}
+
+.topbar-brand { display: flex; flex-direction: column; gap: 2px; }
+
+.wordmark {
+  font-size: var(--text-display);
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text-primary);
+  text-shadow: 0 0 8px rgba(57,255,20,0.5);
+  letter-spacing: 0.02em;
+}
+
+.subtitle { font-size: var(--text-h2); color: var(--text-secondary); }
+
+.topbar-run-info {
+  display: flex;
+  gap: var(--space-4);
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--border-default);
+}
+
+.run-info-item { display: flex; flex-direction: column; gap: var(--space-1); }
+
+.stat-tiles {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-left: auto;
+}
+
+.stat-tile { display: flex; flex-direction: column; gap: var(--space-2); min-width: 90px; }
+
+.stat-tile-divider { width: 1px; align-self: stretch; background: var(--border-default); }
+
+.stat-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-inset);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.stat-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--state-running);
+  transition: width var(--transition-base);
+}
+
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--state-ready);
+  white-space: nowrap;
+}
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  display: inline-block;
+}
+.status-pill.is-playing { color: var(--state-running); }
+.status-pill.is-playing .status-dot { animation: status-pulse 1.6s ease-in-out infinite; }
+.status-pill.is-idle-empty { color: var(--text-dim); }
+.status-pill.is-idle-empty .status-dot { background: var(--text-dim); }
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ---------------------------------------------------------------- */
+/* Zone B — Main grid — EDRD §4.1 */
+/* ---------------------------------------------------------------- */
+.main-grid { position: relative; min-height: 560px; }
+
+.empty-state {
+  position: relative;
+  height: 560px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.empty-state p {
+  color: var(--text-dim);
+  font-size: var(--text-body);
+  z-index: 1;
+  max-width: 420px;
+  text-align: center;
+}
+.empty-state-scanline {
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: 2px;
+  background: var(--border-default);
+  animation: scanline-sweep 3s linear infinite;
+}
+@keyframes scanline-sweep {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(560px); }
+}
+
+.main-grid-inner {
+  display: grid;
+  grid-template-columns: 62% 38%;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.col-left, .col-right {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* ---------------------------------------------------------------- */
+/* CPU Timeline / Gantt — EDRD §5.2 */
+/* ---------------------------------------------------------------- */
+.panel-body-gantt { position: relative; }
+
+.gantt-scroll { overflow-x: auto; }
+
+.gantt-track {
+  position: relative;
+  height: 120px;
+  background: var(--bg-inset);
+  border-radius: 2px;
+  min-width: 100%;
+}
+
+.gantt-segment {
+  position: absolute;
+  top: 12px;
+  height: 96px;
+  border-radius: 2px;
+  opacity: 0.85;
+  border: 1px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-on-accent);
+  font-size: var(--text-label);
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity var(--transition-fast), box-shadow var(--transition-base);
+  box-sizing: border-box;
+}
+.gantt-segment:hover { opacity: 1; }
+.gantt-segment.is-running {
+  box-shadow: 0 0 10px 1px currentColor;
+  border-width: 2px;
+}
+
+.gantt-idle {
+  position: absolute;
+  top: 12px;
+  height: 96px;
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--bg-inset), var(--bg-inset) 4px,
+    var(--border-default) 4px, var(--border-default) 5px
+  );
+  border-radius: 2px;
+}
+
+.gantt-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border-active);
+  left: 0;
+  transition: left 100ms linear;
+  z-index: 5;
+}
+.gantt-playhead.no-anim { transition: none; }
+.playhead-flag {
+  position: absolute;
+  top: -6px;
+  left: -4px;
+  width: 0; height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--border-active);
+}
+
+.gantt-ruler {
+  position: relative;
+  height: 20px;
+  margin-top: var(--space-1);
+  min-width: 100%;
+}
+.gantt-tick-mark {
+  position: absolute;
+  top: 0;
+  font-size: 10px;
+  color: var(--text-dim);
+  transform: translateX(-50%);
+}
+
+.gantt-tooltip {
+  position: absolute;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border-active);
+  border-radius: 4px;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-label);
+  color: var(--text-primary);
+  pointer-events: none;
+  z-index: 10;
+  white-space: nowrap;
+  transition: opacity var(--transition-fast);
+}
+
+/* ---------------------------------------------------------------- */
+/* Playback controls — EDRD §5.6 */
+/* ---------------------------------------------------------------- */
+.panel-body-playback { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.playback-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.btn {
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  border-radius: 4px;
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-data);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast), transform var(--transition-fast);
+}
+.btn:hover { border-color: var(--border-active); }
+.btn:active { transform: scale(0.97); }
+.btn:focus-visible { outline: 2px solid var(--border-active); outline-offset: 2px; }
+.btn:disabled { opacity: 0.4; color: var(--text-dim); cursor: not-allowed; }
+
+.btn-primary {
+  background: var(--text-primary);
+  color: var(--text-on-accent);
+  border-color: var(--text-primary);
+  font-weight: 700;
+}
+.btn-primary:hover { filter: brightness(1.1); }
+
+.speed-control { display: flex; border: 1px solid var(--border-default); border-radius: 4px; overflow: hidden; margin-left: var(--space-2); }
+.speed-btn {
+  background: var(--bg-panel-raised);
+  border: none;
+  border-right: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  padding: var(--space-2) var(--space-2);
+  cursor: pointer;
+}
+.speed-btn:last-child { border-right: none; }
+.speed-btn.is-active { background: var(--text-primary); color: var(--text-on-accent); font-weight: 700; }
+.speed-btn:hover:not(.is-active) { color: var(--text-primary); }
+
+.tick-readout { margin-left: auto; font-size: var(--text-data); color: var(--text-secondary); }
+.tick-readout span { color: var(--text-primary); font-weight: 700; }
+
+.scrub-bar { position: relative; height: 16px; cursor: pointer; }
+.scrub-track {
+  position: absolute; top: 6px; left: 0; right: 0; height: 4px;
+  background: var(--bg-inset); border-radius: 2px;
+}
+.scrub-fill {
+  position: absolute; top: 6px; left: 0; height: 4px;
+  background: var(--border-active); border-radius: 2px; width: 0%;
+}
+.scrub-thumb {
+  position: absolute; top: 3px; width: 10px; height: 10px;
+  border-radius: 50%; background: var(--border-active);
+  left: 0%; transform: translateX(-50%);
+}
+
+/* ---------------------------------------------------------------- */
+/* Ready queue table — EDRD §5.3 */
+/* ---------------------------------------------------------------- */
+.ready-queue-table { width: 100%; border-collapse: collapse; }
+.ready-queue-table thead th {
+  text-align: left;
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--border-default);
+  position: sticky; top: 0; background: var(--bg-panel);
+}
+.ready-queue-table th.hidden-col, .ready-queue-table td.hidden-col { display: none; }
+
+.ready-queue-table tbody tr {
+  border-bottom: 1px solid var(--border-default);
+  position: relative;
+}
+.ready-queue-table td {
+  padding: var(--space-2);
+  font-size: var(--text-data);
+  color: var(--text-secondary);
+  border-left: 3px solid transparent;
+}
+.ready-queue-table td:first-child { padding-left: var(--space-2); }
+.rq-row-accent > td:first-child { border-left-width: 3px; }
+.rq-row-running { box-shadow: inset 0 0 0 1px var(--state-running); }
+.rq-row-running td { color: var(--state-running); }
+
+.class-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--bg-panel-raised);
+  font-size: var(--text-label);
+  letter-spacing: 0.05em;
+}
+.class-pill.cpu-bound { color: var(--text-dim); }
+.class-pill.io-bound { color: var(--state-waiting); }
+.class-pill.interactive { color: var(--text-primary); }
+.class-pill.unknown { color: var(--text-secondary); }
+
+.ready-queue-empty, .aging-empty { color: var(--text-dim); font-size: var(--text-body); }
+
+/* ---------------------------------------------------------------- */
+/* Why-panel — EDRD §5.4 */
+/* ---------------------------------------------------------------- */
+.why-empty { color: var(--text-dim); font-size: var(--text-body); text-align: center; padding: var(--space-4) 0; }
+
+.why-content { transition: opacity var(--transition-base); }
+
+.why-header { font-size: var(--text-h1); font-weight: 700; color: var(--text-primary); margin-bottom: var(--space-3); }
+.why-header .pid-color { font-weight: 700; }
+
+.why-reasons { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.why-reasons li {
+  font-size: var(--text-body);
+  line-height: 1.6;
+  color: var(--text-secondary);
+  display: flex;
+  gap: var(--space-2);
+}
+.why-check { color: var(--accent-positive); flex-shrink: 0; }
+.delta-positive { color: var(--accent-positive); font-weight: 600; }
+.delta-negative { color: var(--accent-negative); font-weight: 600; }
+
+.why-footer { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--border-default); }
+.why-score-label { font-size: var(--text-label); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+.why-score-value { font-size: var(--text-data-lg); color: var(--text-primary); margin: var(--space-1) 0 var(--space-2); }
+
+.why-score-bar { display: flex; gap: 2px; height: 20px; border-radius: 2px; overflow: hidden; }
+.why-score-bar .seg { height: 100%; }
+.why-score-bar .seg.positive { background: var(--accent-positive); }
+.why-score-bar .seg.negative { background: var(--accent-negative); margin-left: auto; }
+
+/* ---------------------------------------------------------------- */
+/* Waiting / aging indicator — EDRD §5.5 */
+/* ---------------------------------------------------------------- */
+.aging-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.aging-list li {
+  font-size: var(--text-data);
+  padding: var(--space-2);
+  border-left: 3px solid var(--border-default);
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  transition: border-color 1.2s ease-out;
+}
+.aging-list li.is-waiting-io { color: var(--state-waiting); }
+.aging-list li.is-ready-aging { color: var(--text-secondary); }
+.aging-list li.warning-flash { border-left-color: var(--accent-warning); }
+.aging-bonus-value { color: var(--accent-positive); font-weight: 600; }
+
+/* ---------------------------------------------------------------- */
+/* Zone C — Footer picker — EDRD §5.7 */
+/* ---------------------------------------------------------------- */
+.footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  min-height: 56px;
+}
+
+.picker-group { display: flex; gap: var(--space-3); }
+.picker { display: flex; flex-direction: column; gap: var(--space-1); }
+.picker select {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-data);
+  border-radius: 4px;
+  padding: var(--space-1) var(--space-2);
+}
+.picker select:focus-visible { outline: 2px solid var(--border-active); outline-offset: 2px; }
+
+.btn-run { margin-left: var(--space-2); }
