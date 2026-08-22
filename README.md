@@ -4,16 +4,6 @@ Adaptive CPU scheduling simulator that dynamically adjusts process priority and 
 
 **Status: Milestone 1 (MVP) complete.** Engine, all 5 required schedulers, and the full dashboard are built, verified, and pushed. See [`PROJECT_STATUS.md`](PROJECT_STATUS.md) for the live snapshot, [`CHANGELOG.md`](CHANGELOG.md) for history, and the [GitHub Issues](https://github.com/vrrroro/ChronOS/issues) for what's left (Milestones 2–4).
 
-## Docs map
-
-Read in this order if you're new to the project:
-
-1. [`PRD.md`](PRD.md) — the functional spec (what ChronOS does, the AARS algorithm, data schemas, milestones). Source of truth.
-2. [`EDRD.md`](EDRD.md) — the dashboard's visual/interaction spec (colors, typography, layout, motion). §9 covers the intro splash specifically.
-3. [`ARCHITECTURE.md`](ARCHITECTURE.md) — module boundaries, the C++ `Scheduler` interface, the JSON contract between engine/dashboard/analysis, the tick-loop pseudocode.
-4. [`CLAUDE.md`](CLAUDE.md) — operating rules for AI-assisted work on this repo: locked stack, "what NOT to do," build commands, and every **logged deviation** from the original spec (see below).
-5. [`PROJECT_STATUS.md`](PROJECT_STATUS.md) — current snapshot: what's done, in progress, next.
-6. [`CHANGELOG.md`](CHANGELOG.md) — full history, dated/versioned per milestone.
 
 ## Quickstart
 
