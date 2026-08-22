@@ -27,6 +27,7 @@ Project: ChronOS — Adaptive CPU Scheduling Engine (AARS algorithm). Full spec:
 ## Dashboard rules
 
 - Follow `EDRD.md` exactly for color tokens, spacing, typography, component layout, and interaction/motion specs. Do not invent new colors, fonts, spacing values, or animation patterns — use the CSS custom properties in EDRD §8.1 as-is.
+- **Deliberate exception (post-Milestone-1, logged decision — see EDRD §8.3):** GSAP is vendored locally (`dashboard/vendor/gsap.min.js`, no CDN) for 4 specific enhancements only — panel load-in stagger, stat-tile number counters, Gantt/button hover micro-interactions, and playhead motion. Timing/easing must still honor EDRD §6's "fast and purposeful" principle (no bounce/elastic/overshoot easings — those are explicitly wrong for dense informational UI). Do not expand GSAP usage beyond these 4 moments without another explicit, logged decision.
 - Jet black + neon green terminal aesthetic is fixed. No light theme, no theme toggle, no alternate color schemes.
 - Monospace font stack only (EDRD §3.1). No secondary sans-serif font unless the user explicitly asks for the fallback described in the EDRD §3.1 edit-note.
 - Dashboard replays a static JSON file (play/pause/step/scrub). It does not stream live from a running process.

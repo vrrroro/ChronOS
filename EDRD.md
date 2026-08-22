@@ -415,4 +415,6 @@ All tokens in Sections 2–4 should be declared once as CSS custom properties on
 
 ### 8.3 What this document deliberately does not specify
 
-Consistent with the PRD's own non-goals: no responsive/mobile breakpoints beyond "don't break above 1280px," no dark/light theme toggle (jet-black is the only theme), no icon library dependency (use inline SVG or unicode glyphs to avoid adding a font-icon build dependency), no animation library dependency (everything in Section 6 is achievable with plain CSS transitions/keyframes).
+Consistent with the PRD's own non-goals: no responsive/mobile breakpoints beyond "don't break above 1280px," no dark/light theme toggle (jet-black is the only theme), no icon library dependency (use inline SVG or unicode glyphs to avoid adding a font-icon build dependency).
+
+> ✎ **Logged deviation (post-Milestone-1):** the "no animation library dependency" rule above was deliberately overridden, on explicit request, for 4 specific enhancements: panel load-in stagger, stat-tile number counters, Gantt/button hover micro-interactions, and playhead motion. GSAP is vendored locally (no CDN, per the offline-demo-safety note in `ARCHITECTURE.md` §5.1). Every other panel/interaction in Section 6 is still plain CSS, and any GSAP timing must stay within this section's "fast and purposeful" principle — `power1`/`power2` easings only, no bounce/elastic/overshoot (those read as sloppy on dense informational UI, not as polish). See `CLAUDE.md`'s Dashboard rules for the enforcement note.

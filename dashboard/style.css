@@ -124,23 +124,13 @@ body { padding: var(--space-4); }
 
 .panel-body { padding: var(--space-3); }
 
-/* Panel load-in — EDRD §6.7 */
+/* Panel load-in — EDRD §6.7. Resting pre-animate state only; the reveal
+   itself is a GSAP stagger (app.js `animateLoadIn`, logged exception —
+   CLAUDE.md Dashboard rules / EDRD §8.3) so it can be re-triggered per
+   genuine load, not just once via a CSS `animation-delay`. */
 .panel-anim {
   opacity: 0;
   transform: translateY(8px);
-  animation: panel-load-in var(--transition-slow) forwards;
-}
-.topbar.panel-anim { animation-delay: 0ms; }
-#empty-state.panel-anim { animation-delay: 40ms; }
-#panel-gantt.panel-anim { animation-delay: 80ms; }
-#panel-playback.panel-anim { animation-delay: 100ms; }
-#panel-ready-queue.panel-anim { animation-delay: 120ms; }
-#panel-why.panel-anim { animation-delay: 160ms; }
-#panel-aging.panel-anim { animation-delay: 200ms; }
-.footer.panel-anim { animation-delay: 240ms; }
-
-@keyframes panel-load-in {
-  to { opacity: 1; transform: translateY(0); }
 }
 
 /* ---------------------------------------------------------------- */
@@ -327,16 +317,17 @@ body { padding: var(--space-4); }
 }
 
 .gantt-playhead {
+  /* `left` is animated from app.js (GSAP quickTo during playback, gsap.set
+     for instant scrub/step jumps — EDRD §6.1) — no CSS transition here,
+     it would fight the JS-driven tween. Logged exception, see EDRD §8.3. */
   position: absolute;
   top: 0;
   bottom: 0;
   width: 2px;
   background: var(--border-active);
   left: 0;
-  transition: left 100ms linear;
   z-index: 5;
 }
-.gantt-playhead.no-anim { transition: none; }
 .playhead-flag {
   position: absolute;
   top: -6px;

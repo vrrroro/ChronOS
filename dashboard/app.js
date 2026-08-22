@@ -35,6 +35,65 @@
   const $ = (id) => document.getElementById(id);
 
   // ---------------------------------------------------------------
+  // GSAP enhancements — logged exception to "no animation library"
+  // (CLAUDE.md Dashboard rules / EDRD §8.3). Scoped to exactly 4 moments:
+  // panel load-in, stat-tile counters, hover lift, playhead motion. Every
+  // call is guarded by `typeof gsap === 'undefined'` so the dashboard still
+  // renders correctly (just without the extra polish) if vendor/gsap.min.js
+  // ever fails to load — render(state) itself never depends on GSAP.
+  // ---------------------------------------------------------------
+
+  const HAS_GSAP = typeof gsap !== 'undefined';
+
+  // Stagger-reveal a set of panels — EDRD §6.7: fast, restrained, only on a
+  // genuine load (page boot, or a new result JSON), never on playback.
+  function animateLoadIn(selector) {
+    const els = HAS_GSAP ? gsap.utils.toArray(selector) : [];
+    if (!els.length) return;
+    gsap.fromTo(els, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.3, stagger: 0.04, ease: 'power1.out', overwrite: true });
+  }
+
+  // Count-up/down tween for a stat tile — target overwrites the running
+  // tween automatically (GSAP default), so rapid tick-by-tick updates
+  // during playback chase smoothly instead of queuing up.
+  const counterProxies = { cpu: { value: 0 }, processes: { value: 0 }, switches: { value: 0 } };
+  function animateCounter(proxy, el, newValue, suffix) {
+    if (!HAS_GSAP) { el.textContent = Math.round(newValue) + (suffix || ''); return; }
+    gsap.to(proxy, {
+      value: newValue,
+      duration: 0.25,
+      ease: 'power1.out',
+      onUpdate: () => { el.textContent = Math.round(proxy.value) + (suffix || ''); },
+    });
+  }
+
+  // Subtle hover lift (EDRD-compatible: 1px, 150ms, power1.out — matches
+  // the existing CSS hover treatments' timing, just adds a motion cue on
+  // top of the color/opacity ones CSS already owns).
+  function attachHoverLift(el) {
+    if (!HAS_GSAP) return;
+    el.addEventListener('mouseenter', () => gsap.to(el, { y: -1, duration: 0.15, ease: 'power1.out', overwrite: true }));
+    el.addEventListener('mouseleave', () => gsap.to(el, { y: 0, duration: 0.15, ease: 'power1.out', overwrite: true }));
+  }
+
+  // Playhead: quickTo (linear, tied to tick rate) during continuous
+  // playback so motion reads as smooth per EDRD §6.1; gsap.set (truly
+  // instant, no tween) for manual scrub/step/reset per the same section's
+  // "a dragged scrub bar that eases toward your cursor feels laggy" rule.
+  let playheadQuickTo = null;
+  function movePlayhead(pxLeft, animate) {
+    const playhead = $('gantt-playhead');
+    if (!HAS_GSAP) { playhead.style.left = `${pxLeft}px`; return; }
+    if (animate) {
+      if (!playheadQuickTo) playheadQuickTo = gsap.quickTo(playhead, 'left', { duration: 1 / (BASE_TICKS_PER_SECOND * state.speed), ease: 'none' });
+      playheadQuickTo(pxLeft);
+    } else {
+      gsap.killTweensOf(playhead);
+      gsap.set(playhead, { left: pxLeft });
+    }
+  }
+
+  // ---------------------------------------------------------------
   // Derivation helpers (schema-gap workarounds, see note above)
   // ---------------------------------------------------------------
 
@@ -181,10 +240,10 @@
 
     const busy = cpuBusyTicksUpTo(data, s.currentTick);
     const util = s.currentTick > 0 ? Math.round((busy / s.currentTick) * 100) : 0;
-    $('stat-cpu').textContent = `${util}%`;
+    animateCounter(counterProxies.cpu, $('stat-cpu'), util, '%');
     $('stat-cpu-bar').style.width = `${util}%`;
-    $('stat-processes').textContent = String((data.processStats || []).length);
-    $('stat-switches').textContent = String(contextSwitchesUpTo(data, s.currentTick));
+    animateCounter(counterProxies.processes, $('stat-processes'), (data.processStats || []).length, '');
+    animateCounter(counterProxies.switches, $('stat-switches'), contextSwitchesUpTo(data, s.currentTick), '');
 
     const pill = $('status-pill');
     if (s.isPlaying) {
@@ -231,6 +290,7 @@
       el.addEventListener('mouseenter', (ev) => showGanttTooltip(ev, g));
       el.addEventListener('mousemove', (ev) => showGanttTooltip(ev, g));
       el.addEventListener('mouseleave', hideGanttTooltip);
+      attachHoverLift(el);
       track.appendChild(el);
       cursor = g.end;
     }
@@ -242,9 +302,9 @@
       track.appendChild(idle);
     }
 
-    // Playhead
-    const playhead = $('gantt-playhead');
-    playhead.style.left = `${s.currentTick * pxPerTick}px`;
+    // Playhead — smooth (GSAP quickTo) during continuous playback, instant
+    // (gsap.set) on manual scrub/step/pause/reset, per EDRD §6.1.
+    movePlayhead(s.currentTick * pxPerTick, s.isPlaying);
 
     // Ruler
     const ruler = $('gantt-ruler');
@@ -529,6 +589,7 @@
     agingFlashed = new Set();
     agingAboveThreshold = new Map();
     render(state);
+    animateLoadIn('#panel-gantt, #panel-playback, #panel-ready-queue, #panel-why, #panel-aging');
   }
 
   function handleFile(file) {
@@ -550,6 +611,8 @@
   // ---------------------------------------------------------------
 
   function init() {
+    document.querySelectorAll('.btn').forEach(attachHoverLift);
+
     $('btn-play-pause').addEventListener('click', () => (state.isPlaying ? pause() : play()));
     $('btn-step-fwd').addEventListener('click', stepForward);
     $('btn-step-back').addEventListener('click', stepBack);
@@ -558,6 +621,7 @@
     document.querySelectorAll('.speed-btn').forEach((b) => {
       b.addEventListener('click', () => {
         state.speed = parseFloat(b.dataset.speed);
+        playheadQuickTo = null; // duration is baked in at creation — force a rebuild at the new speed
         if (state.isPlaying) { pause(); play(); } else { render(state); }
       });
     });
@@ -590,6 +654,7 @@
     });
 
     render(state);
+    animateLoadIn('#topbar, #empty-state, .footer');
   }
 
   document.addEventListener('DOMContentLoaded', init);
