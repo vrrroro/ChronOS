@@ -134,6 +134,66 @@ body { padding: var(--space-4); }
 }
 
 /* ---------------------------------------------------------------- */
+/* Intro splash — CRT-boot reveal, GSAP-driven (app.js `initIntro`).
+   Logged exception, see CLAUDE.md Dashboard rules / EDRD §8.3. Resting
+   opacity states only here; the timeline itself lives in JS so it can be
+   skipped/killed on click or keypress. */
+/* ---------------------------------------------------------------- */
+.intro-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--bg-void);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.intro-wordmark {
+  font-family: var(--font-mono);
+  font-size: 64px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-primary);
+  text-shadow: 0 0 16px rgba(57,255,20,0.6), 0 0 40px rgba(57,255,20,0.25);
+  opacity: 0;
+}
+
+.intro-subtitle {
+  margin-top: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-h2);
+  color: var(--text-secondary);
+  letter-spacing: 0.05em;
+  opacity: 0;
+}
+
+.intro-scanline {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--border-active);
+  box-shadow: 0 0 12px 2px var(--border-active);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.intro-skip-hint {
+  position: absolute;
+  bottom: var(--space-4);
+  right: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+
+/* ---------------------------------------------------------------- */
 /* Zone A — Top bar — EDRD §5.1 */
 /* ---------------------------------------------------------------- */
 .topbar {

@@ -93,6 +93,48 @@
     }
   }
 
+  // Intro splash — CRT-boot wordmark flicker-in, brief hold, scanline-sweep
+  // wipe into the dashboard. Runs once per page load, skippable (click or
+  // any key), and respects prefers-reduced-motion. `onComplete` is where
+  // the dashboard's own boot reveal (animateLoadIn) picks up — the two are
+  // sequenced, not simultaneous, so the wordmark doesn't compete with the
+  // topbar's own copy of it appearing underneath.
+  function initIntro(onComplete) {
+    const overlay = $('intro-overlay');
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!overlay) { onComplete(); return; }
+    if (!HAS_GSAP || reduced) { overlay.remove(); onComplete(); return; }
+
+    const wordmark = overlay.querySelector('.intro-wordmark');
+    const subtitle = $('intro-subtitle');
+    const scan = $('intro-scanline');
+
+    let finished = false;
+    function finish() {
+      if (finished) return;
+      finished = true;
+      tl.kill();
+      window.removeEventListener('keydown', finish);
+      overlay.removeEventListener('click', finish);
+      overlay.remove();
+      onComplete();
+    }
+    overlay.addEventListener('click', finish, { once: true });
+    window.addEventListener('keydown', finish, { once: true });
+
+    const tl = gsap.timeline({ onComplete: finish });
+    tl.to(wordmark, { opacity: 1, duration: 0.05 })
+      .to(wordmark, { opacity: 0.15, duration: 0.03 })
+      .to(wordmark, { opacity: 0.85, duration: 0.04 })
+      .to(wordmark, { opacity: 0.1, duration: 0.03 })
+      .to(wordmark, { opacity: 1, duration: 0.2, ease: 'power1.out' })
+      .to(subtitle, { opacity: 1, duration: 0.3, ease: 'power1.out' }, '-=0.05')
+      .to({}, { duration: 0.45 }) // readable hold
+      .to(scan, { top: '100%', opacity: 1, duration: 0.35, ease: 'power2.in' }, 'wipe')
+      .to(overlay, { opacity: 0, duration: 0.4, ease: 'power1.in' }, 'wipe+=0.05')
+      .to(scan, { opacity: 0, duration: 0.15 }, '-=0.1');
+  }
+
   // ---------------------------------------------------------------
   // Derivation helpers (schema-gap workarounds, see note above)
   // ---------------------------------------------------------------
@@ -654,7 +696,7 @@
     });
 
     render(state);
-    animateLoadIn('#topbar, #empty-state, .footer');
+    initIntro(() => animateLoadIn('#topbar, #empty-state, .footer'));
   }
 
   document.addEventListener('DOMContentLoaded', init);
