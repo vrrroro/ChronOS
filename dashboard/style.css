@@ -41,7 +41,14 @@
   --transition-slow: 300ms ease-out;
 
   /* Font */
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', Consolas, 'Courier New', monospace;
+  /* Logged deviation (post-Milestone-1, explicit request — see CLAUDE.md
+     Dashboard rules / EDRD §3.1): site-wide Apple-style system-font
+     override, replacing the terminal's original monospace-only identity.
+     `-apple-system`/`BlinkMacSystemFont` resolve to San Francisco on
+     macOS/iOS (the OS's own installed font, not embedded/redistributed —
+     SF Pro isn't licensable for that); everywhere else falls back to the
+     platform's native UI font. */
+  --font-primary: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif;
 
   /* Type scale — EDRD §3.2 */
   --text-display: 28px;
@@ -68,7 +75,7 @@
 html, body {
   background: var(--bg-void);
   color: var(--text-secondary);
-  font-family: var(--font-mono);
+  font-family: var(--font-primary);
   margin: 0;
   padding: 0;
   min-width: 1280px;
@@ -134,15 +141,21 @@ body { padding: var(--space-4); }
 }
 
 /* ---------------------------------------------------------------- */
-/* Intro splash — CRT-boot reveal, GSAP-driven (app.js `initIntro`).
-   Logged exception, see CLAUDE.md Dashboard rules / EDRD §8.3. Resting
-   opacity states only here; the timeline itself lives in JS so it can be
-   skipped/killed on click or keypress. */
+/* Intro hero — real scroll-driven reveal, GSAP ScrollTrigger (app.js
+   `initIntro`). Logged exception, see CLAUDE.md Dashboard rules / EDRD
+   §8.3 and §4.1 (this is the one place in the app that scrolls — the
+   dashboard proper below it is unchanged, still needs no scrolling once
+   reached). A real in-flow section, not an overlay: ScrollTrigger's
+   `pin: true` handles fixing it in place for the pinned scroll range
+   itself, so no position:fixed/inset here. */
 /* ---------------------------------------------------------------- */
-.intro-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
+.intro-hero {
+  height: 100vh;
+  /* body has --space-4 padding for the dashboard content below; pull the
+     hero flush to the viewport edges so it reads as a true full-bleed
+     splash screen, not a padded panel like the rest of the app. */
+  margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) 0;
+  width: calc(100% + var(--space-4) * 2);
   background: var(--bg-void);
   display: flex;
   flex-direction: column;
@@ -150,10 +163,11 @@ body { padding: var(--space-4); }
   justify-content: center;
   cursor: pointer;
   overflow: hidden;
+  position: relative;
 }
 
 .intro-wordmark {
-  font-family: var(--font-mono);
+  font-family: var(--font-primary);
   font-size: 64px;
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -164,7 +178,7 @@ body { padding: var(--space-4); }
 
 .intro-subtitle {
   margin-top: var(--space-2);
-  font-family: var(--font-mono);
+  font-family: var(--font-primary);
   font-size: var(--text-h2);
   color: var(--text-secondary);
   letter-spacing: 0.05em;
@@ -185,12 +199,15 @@ body { padding: var(--space-4); }
 
 .intro-skip-hint {
   position: absolute;
-  bottom: var(--space-4);
-  right: var(--space-4);
-  font-family: var(--font-mono);
+  bottom: var(--space-5);
+  font-family: var(--font-primary);
   font-size: var(--text-label);
   letter-spacing: 0.05em;
   color: var(--text-dim);
+  opacity: 0;
+}
+.intro-skip-hint.is-visible {
+  animation: status-pulse 1.6s ease-in-out infinite; /* same restrained pulse as the playing-status dot, EDRD §6.5 */
 }
 
 /* ---------------------------------------------------------------- */
@@ -444,7 +461,7 @@ body { padding: var(--space-4); }
   color: var(--text-primary);
   border-radius: 4px;
   padding: var(--space-2) var(--space-3);
-  font-family: var(--font-mono);
+  font-family: var(--font-primary);
   font-size: var(--text-data);
   cursor: pointer;
   transition: border-color var(--transition-fast), background var(--transition-fast), transform var(--transition-fast);
@@ -468,7 +485,7 @@ body { padding: var(--space-4); }
   border: none;
   border-right: 1px solid var(--border-default);
   color: var(--text-secondary);
-  font-family: var(--font-mono);
+  font-family: var(--font-primary);
   font-size: var(--text-label);
   padding: var(--space-2) var(--space-2);
   cursor: pointer;
@@ -603,7 +620,7 @@ body { padding: var(--space-4); }
   background: var(--bg-panel);
   border: 1px solid var(--border-default);
   color: var(--text-secondary);
-  font-family: var(--font-mono);
+  font-family: var(--font-primary);
   font-size: var(--text-data);
   border-radius: 4px;
   padding: var(--space-1) var(--space-2);

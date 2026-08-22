@@ -8,14 +8,15 @@
 </head>
 <body>
 
-<!-- Intro splash — CRT-boot wordmark reveal into the dashboard (GSAP,
-     logged exception, see CLAUDE.md/EDRD.md §8.3). Click or any key skips. -->
-<div class="intro-overlay" id="intro-overlay">
+<!-- Intro hero — real scroll-driven reveal into the dashboard (GSAP
+     ScrollTrigger, logged exception, see CLAUDE.md/EDRD.md §8.3/§4.1).
+     Pinned for one viewport-height of scroll; click/key jumps straight in. -->
+<section class="intro-hero" id="intro-hero">
   <div class="intro-scanline" id="intro-scanline"></div>
-  <div class="intro-wordmark">CHRONOS</div>
+  <div class="intro-wordmark" id="intro-wordmark">CHRONOS</div>
   <div class="intro-subtitle" id="intro-subtitle">Adaptive CPU Scheduling Engine</div>
-  <div class="intro-skip-hint">click or press any key to skip</div>
-</div>
+  <div class="intro-skip-hint" id="intro-skip-hint">scroll down (or click, or press any key) to enter</div>
+</section>
 
 <div id="app" class="app">
 
@@ -207,6 +208,7 @@
 </div>
 
 <script src="vendor/gsap.min.js"></script>
+<script src="vendor/ScrollTrigger.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

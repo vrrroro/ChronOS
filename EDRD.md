@@ -124,6 +124,8 @@ Slot 1 (`#39FF14`) is both the RUNNING-state color and a process palette color, 
 
 > ✎ **EDIT ME:** If, once built, long text (why-panel reasons, tooltips) feels harder to read in monospace than you'd like, the fallback is to add one sans-serif (e.g. Inter) *only* for prose sentences, keeping mono for all numbers/labels/code. Treat this as a one-line CSS variable change, not a redesign.
 
+> ✎ **Logged deviation (post-Milestone-1, explicit request):** the monospace-only rule above was overridden site-wide, not just for prose — this goes beyond the EDIT ME fallback immediately above, which only ever anticipated a *prose-only* exception. Every element (headings, PIDs, tick numbers, table data, labels — everything) now uses `--font-primary: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif` (`style.css` `:root`), which resolves to San Francisco on macOS/iOS via the OS's own installed font (SF Pro itself isn't licensable to embed/redistribute on a public page) and to each other platform's native UI font otherwise. This drops the numeric-alignment benefit monospace gave PID/tick columns (§3.1's original rationale) and moves away from the "terminal command center" identity §1.1 is built around — a real trade-off, made deliberately, not a silent one. `--font-mono`'s original JetBrains Mono stack is no longer referenced anywhere in `style.css`.
+
 ### 3.2 Type scale
 
 | Token | Size | Line height | Weight | Usage |
@@ -399,8 +401,8 @@ All tokens in Sections 2–4 should be declared once as CSS custom properties on
   --transition-base: 180ms ease-out;
   --transition-slow: 300ms ease-out;
 
-  /* Font */
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', Consolas, 'Courier New', monospace;
+  /* Font — logged deviation, see §3.1's "Logged deviation" note */
+  --font-primary: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 ```
 

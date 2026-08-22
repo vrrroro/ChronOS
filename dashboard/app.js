@@ -44,6 +44,8 @@
   // ---------------------------------------------------------------
 
   const HAS_GSAP = typeof gsap !== 'undefined';
+  const HAS_SCROLLTRIGGER = HAS_GSAP && typeof ScrollTrigger !== 'undefined';
+  if (HAS_SCROLLTRIGGER) gsap.registerPlugin(ScrollTrigger);
 
   // Stagger-reveal a set of panels — EDRD §6.7: fast, restrained, only on a
   // genuine load (page boot, or a new result JSON), never on playback.
@@ -93,46 +95,89 @@
     }
   }
 
-  // Intro splash — CRT-boot wordmark flicker-in, brief hold, scanline-sweep
-  // wipe into the dashboard. Runs once per page load, skippable (click or
-  // any key), and respects prefers-reduced-motion. `onComplete` is where
-  // the dashboard's own boot reveal (animateLoadIn) picks up — the two are
-  // sequenced, not simultaneous, so the wordmark doesn't compete with the
-  // topbar's own copy of it appearing underneath.
+  // Intro hero — CRT-boot wordmark flicker-in (time-based, plays once on
+  // load), then a real scroll-driven exit: scrolling through the hero's
+  // one-viewport height pins it and scrubs the wordmark/scanline out,
+  // revealing the dashboard underneath. Skippable via click/keypress
+  // (smooth-scrolls straight past the hero — still scroll-driven, just
+  // fast-forwarded) and respects prefers-reduced-motion (no pin/scrub,
+  // hero behaves as a plain static section). `onComplete` fires exactly
+  // once, the first time the hero is scrolled past, and is where the
+  // dashboard's own boot reveal (animateLoadIn) picks up.
   function initIntro(onComplete) {
-    const overlay = $('intro-overlay');
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (!overlay) { onComplete(); return; }
-    if (!HAS_GSAP || reduced) { overlay.remove(); onComplete(); return; }
+    const hero = $('intro-hero');
+    const app = $('app');
+    if (!hero) { onComplete(); return; }
 
-    const wordmark = overlay.querySelector('.intro-wordmark');
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!HAS_GSAP || !HAS_SCROLLTRIGGER || reduced) {
+      // No pin/scrub/flicker — just make the hero's text immediately
+      // readable (plain DOM, no GSAP dependency) and let the dashboard
+      // boot in underneath; the user scrolls past the static hero normally.
+      hero.querySelector('.intro-wordmark').style.opacity = '1';
+      $('intro-subtitle').style.opacity = '1';
+      $('intro-skip-hint').style.opacity = '1';
+      onComplete();
+      return;
+    }
+
+    const wordmark = hero.querySelector('.intro-wordmark');
     const subtitle = $('intro-subtitle');
     const scan = $('intro-scanline');
+    const hint = $('intro-skip-hint');
 
-    let finished = false;
-    function finish() {
-      if (finished) return;
-      finished = true;
-      tl.kill();
-      window.removeEventListener('keydown', finish);
-      overlay.removeEventListener('click', finish);
-      overlay.remove();
-      onComplete();
-    }
-    overlay.addEventListener('click', finish, { once: true });
-    window.addEventListener('keydown', finish, { once: true });
-
-    const tl = gsap.timeline({ onComplete: finish });
-    tl.to(wordmark, { opacity: 1, duration: 0.05 })
+    // Entrance: plays immediately on load, independent of scroll.
+    gsap.timeline()
+      .to(wordmark, { opacity: 1, duration: 0.05 })
       .to(wordmark, { opacity: 0.15, duration: 0.03 })
       .to(wordmark, { opacity: 0.85, duration: 0.04 })
       .to(wordmark, { opacity: 0.1, duration: 0.03 })
       .to(wordmark, { opacity: 1, duration: 0.2, ease: 'power1.out' })
       .to(subtitle, { opacity: 1, duration: 0.3, ease: 'power1.out' }, '-=0.05')
-      .to({}, { duration: 0.45 }) // readable hold
-      .to(scan, { top: '100%', opacity: 1, duration: 0.35, ease: 'power2.in' }, 'wipe')
-      .to(overlay, { opacity: 0, duration: 0.4, ease: 'power1.in' }, 'wipe+=0.05')
-      .to(scan, { opacity: 0, duration: 0.15 }, '-=0.1');
+      .to(hint, { opacity: 1, duration: 0.3, ease: 'power1.out', onComplete: () => hint.classList.add('is-visible') });
+
+    let revealed = false;
+    function reveal() {
+      if (revealed) return;
+      revealed = true;
+      window.removeEventListener('keydown', skip);
+      hero.removeEventListener('click', skip);
+      onComplete();
+    }
+
+    // Exit: scrubbed by real scroll position through the hero's own
+    // height, then pin releases and the dashboard (`#app`) takes over the
+    // viewport normally — the one place in the app that scrolls (EDRD §4.1
+    // logged exception), the dashboard itself still needs none once reached.
+    const exitTl = gsap.timeline({
+      scrollTrigger: {
+        trigger: hero,
+        start: 'top top',
+        end: 'bottom top',
+        scrub: 0.5,
+        pin: true,
+        onLeave: reveal, // fires once per page load — scrolling back up and down again re-pins/re-scrubs visually but doesn't replay the dashboard's own boot reveal a second time
+      },
+    })
+      .to(wordmark, { scale: 0.6, opacity: 0, ease: 'none' })
+      .to(subtitle, { opacity: 0, ease: 'none' }, '<')
+      .to(hint, { opacity: 0, ease: 'none' }, '<')
+      .to(scan, { top: '100%', opacity: 1, ease: 'none' }, '<')
+      .to(hero, { opacity: 0, ease: 'none' }, '<0.3');
+
+    // `hero.offsetHeight` alone is NOT the right skip target — ScrollTrigger's
+    // `pin: true` inserts spacer space to hold the pin's whole scroll range,
+    // so the dashboard's actual document position is `hero height + pin
+    // range` further down, not just past the hero itself. Landing short of
+    // that leaves the viewport in the dead zone between "hero faded out" and
+    // "dashboard not yet scrolled into view" — go to the trigger's own
+    // resolved `end` (its absolute page scroll position) instead.
+    function skip() {
+      const st = exitTl.scrollTrigger;
+      window.scrollTo({ top: st ? st.end : hero.offsetHeight, behavior: 'smooth' });
+    }
+    hero.addEventListener('click', skip);
+    window.addEventListener('keydown', skip);
   }
 
   // ---------------------------------------------------------------
