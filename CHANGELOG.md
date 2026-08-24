@@ -38,6 +38,23 @@ four docs had fallen behind the code they describe. This entry closes both gaps.
   root cause was a classifier mechanism bug, not thresholds), still described
   the pivot/redesign as uncommitted.
 
+#### Fixed
+- `ProcessHud.qml:205` — the SWITCHES row's `value: root.entry.contextSwitches` assigned
+  raw `undefined` to a `text: QString` binding while `entry` still held its default `({})`
+  (i.e. at construction, before any hover), producing a QML warning on every launch that
+  reached the Dashboard. Every sibling `HudRow` string-concatenates its value (`+ " ticks"`,
+  `"tick " + ...`), which coerces `undefined` to the string `"undefined"` instead of leaving
+  it as the JS value — this was the one row that didn't. Fixed by matching that pattern
+  (`+ ""`). Found via a manual launch-and-hover pass after the build/smoke-test verification
+  above didn't reach the Dashboard screen long enough to trigger it.
+- Also verified, while chasing what first looked like a text/pane overflow bug in a
+  screenshot of the algorithm picker: it wasn't one. `root.width` really is `1180`
+  (matches the window), confirmed via a temporary `console.log`. The apparent clipping was
+  this specific sandboxed environment's screenshot tooling — a DPI-unaware capture script
+  reading a Per-Monitor-V2 DPI-aware window (`devicePixelRatio 1.5`) — not the app. Recorded
+  here so it isn't re-investigated as a real bug next time a screenshot looks wrong in this
+  environment; see `PROJECT_STATUS.md` §9 for the existing note this confirms.
+
 #### Changed
 - Closed GitHub issues #2, #3, #9–#20 to match reality: #2 (workload presets) and
   #3 (AARS classification) are fixed and verified; #9–#13 are historical

@@ -183,7 +183,7 @@ Rectangle {
         HudRow {
             visible: root.entry.done === true
             label: "SWITCHES"
-            value: root.entry.contextSwitches
+            value: root.entry.contextSwitches + ""
         }
     }
 
