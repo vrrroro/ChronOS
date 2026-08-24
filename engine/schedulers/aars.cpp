@@ -65,6 +65,7 @@ std::string classTag(ProcessClass c) {
         case ProcessClass::CPU_BOUND: return "classified_cpu_bound";
         case ProcessClass::IO_BOUND: return "classified_io_bound";
         case ProcessClass::INTERACTIVE: return "classified_interactive";
+        case ProcessClass::BALANCED: return "classified_balanced";
         case ProcessClass::UNKNOWN: return "classified_unknown";
     }
     return "classified_unknown";
@@ -131,6 +132,10 @@ int AARSScheduler::currentQuantum(const Process& running) const {
         case ProcessClass::CPU_BOUND: return 8;
         case ProcessClass::INTERACTIVE: return 3;
         case ProcessClass::IO_BOUND: return 2;
+        // BALANCED and UNKNOWN share the neutral quantum: one is "judged
+        // unremarkable", the other "not yet judged", and neither is a reason
+        // to lengthen or shorten the slice.
+        case ProcessClass::BALANCED:
         case ProcessClass::UNKNOWN: default: return 5;
     }
 }

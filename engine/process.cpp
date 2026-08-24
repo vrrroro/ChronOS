@@ -17,6 +17,7 @@ std::string processClassToString(ProcessClass c) {
         case ProcessClass::CPU_BOUND: return "CPU_BOUND";
         case ProcessClass::IO_BOUND: return "IO_BOUND";
         case ProcessClass::INTERACTIVE: return "INTERACTIVE";
+        case ProcessClass::BALANCED: return "BALANCED";
     }
     return "UNKNOWN";
 }

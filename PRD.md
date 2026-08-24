@@ -51,9 +51,11 @@ This does not cost you any of the conceptual OS content — process states, PCBs
 
 Your original plan implied a live dashboard: the C++ backend running the simulation while a frontend displays it updating in real time, which usually means standing up a local HTTP or WebSocket server and keeping backend and frontend in sync tick-by-tick. That's a whole extra subsystem (networking, serialization, connection handling) layered on top of the scheduler itself, and debugging "is the bug in my scheduler or in my socket code" is a genuinely miserable beginner experience.
 
-**Decision:** the C++ simulator runs the entire simulation for a given workload instantly, start to finish, and writes out one JSON file containing every tick and every scheduling decision. The web dashboard then loads that JSON file and replays it, with play, pause, step-forward, step-back, and a speed slider.
+**Decision:** the C++ simulator runs the entire simulation for a given workload instantly, start to finish, producing every tick and every scheduling decision in memory. The dashboard then replays it, with play, pause, step-forward, step-back, and a speed slider. This part of the decision still holds exactly as written — **what changed (2026-08-23 pivot, see edit-note below) is the dashboard itself**: it is now a native Qt/QML desktop app that links the simulator in-process (no JSON round-trip for interactive use, no server, still nothing to keep alive during a demo), not a web page loading a JSON file. The original "no live backend" reasoning is exactly why this was safe to do — there was never a network/socket boundary to begin with, just a file boundary, and swapping a file-read for an in-process function call doesn't reintroduce the live-backend complexity this section was written to avoid. The CLI still writes the JSON file described below, for `analysis.py`.
 
-This still looks and feels completely "live" to anyone watching your demo — arguably it looks better, because you can pause on the exact interesting moment (an aging boost, a preemption) and explain it. And re-running a different workload is just: run the C++ binary again, refresh the page. No server to keep alive during your demo.
+> **Logged deviation (2026-08-23):** the "web dashboard" throughout this document (originally: static HTML/CSS/JS, opened in a browser, loading a JSON file) was replaced with a native Qt 6 / QML desktop application per explicit user request — a polished animated executable was wanted, not something opened in a browser. See `CLAUDE.md`'s "Architecture pivot" note and `ARCHITECTURE.md` §5 for the current GUI architecture. Every other reference to "the dashboard" in this document below should be read as "the native GUI" — the panel *contents* (Gantt chart, ready queue, why-panel, aging indicator, playback controls) are unchanged from the original spec, plus one new panel (per-process progress ticker, `EDRD.md` §5.8) that wasn't in the original spec.
+
+This still looks and feels completely "live" to anyone watching your demo — arguably it looks better, because you can pause on the exact interesting moment (an aging boost, a preemption) and explain it. And re-running a different workload is just: pick it from the in-app list and press RUN — no separate terminal step at all now, an improvement over the original file-refresh flow.
 
 > **Why this is the right trade for you specifically**
 > - You've done small C++ and small web projects, but never networking/sockets. This removes the one subsystem neither of your existing skills covers.
@@ -83,7 +85,7 @@ This is, incidentally, also what makes a stronger project: professors have seen 
 2. Implement five classic scheduling algorithms correctly and verifiably: FCFS, SJF (non-preemptive), Round Robin, Priority (with aging), and — once the pipeline is proven — MLFQ.
 3. Design and implement your own adaptive algorithm, AARS, with a documented scoring formula, and be able to explain every term in it.
 4. Produce a JSON execution log (Gantt-chart data + per-tick scheduler decisions + reasons) for any run.
-5. Build a web dashboard that replays that JSON log: CPU timeline / Gantt chart, ready queue table, a live "why did the scheduler pick this process" explanation panel, and summary stats.
+5. Build a native desktop GUI (originally planned as a web dashboard — see §2.2's logged deviation) that replays that data: CPU timeline / Gantt chart, ready queue table, a live "why did the scheduler pick this process" explanation panel, summary stats, and a per-process progress ticker.
 6. Run the same workload through all algorithms and produce a comparison table + at least 3 charts (avg waiting time, avg turnaround time, avg response time, at minimum) using Python + Matplotlib.
 7. Provide at least 3 predefined workload presets (e.g. CPU-heavy, interactive/I-O heavy, starvation stress test) that produce visibly different scheduler behavior.
 8. Be able to explain, in a viva/demo setting, every OS concept the project touches: process states, PCB, ready queue, preemption, time quantum, context switching, aging/starvation, priority inversion avoidance.
@@ -99,7 +101,7 @@ Cutting these isn't a failure — they're the difference between a semester-long
 - Benchmark runs at 5,000–10,000 processes as a required feature (nice stretch goal, not required — Section 6.5).
 - Real Linux scheduler integration / kernel-level anything.
 - Persistent database, user accounts, multi-user anything — this is a single-user local tool.
-- Mobile responsiveness / cross-browser polish beyond "works in Chrome on a laptop for a demo."
+- Mobile/responsive layout, cross-browser anything (the GUI is a native desktop app, not a web page — see §2.2's logged deviation) — target laptop screens only.
 
 ---
 
@@ -113,18 +115,22 @@ Three independent pieces that talk to each other only through files. This is del
 > 1. You pick a workload (predefined preset or custom process list) via a config file or a simple CLI prompt.
 > 2. The C++ simulator engine runs the full simulation for the chosen algorithm, tick by tick, in memory.
 > 3. The simulator writes one result JSON file: full Gantt data, every process's final stats (waiting/turnaround/response time), and a per-decision log (what the scheduler chose and why).
-> 4. The web dashboard (static HTML/CSS/JS, opened directly in a browser — no server needed) loads that JSON and renders the replay: timeline, ready queue, explanation panel, stats.
+> 4. The native GUI (Qt/QML desktop app — see §2.2's logged deviation) links the simulator in-process and renders the replay: timeline, ready queue, explanation panel, stats, process ticker. (The CLI binary still writes a JSON result file too, for step 5/`analysis.py`.)
 > 5. For comparisons, a small runner script executes all algorithms against the same workload back-to-back and writes one combined results file; `analysis.py` reads it and produces the comparison table + charts.
 
 ### 4.2 Folder structure
 
 Simplified from your original plan, but the same spirit:
 
+**Updated 2026-08-23** — reflects the architecture pivot (§2.2): `dashboard/` was replaced with `app/` (native Qt/QML GUI), and `engine/` gained `chronos_core` library-split files shared by the CLI and the GUI.
+
 ```
 ChronOS/
 ├── engine/                  (C++ core)
 │   ├── process.h/.cpp        Process struct + state enum
 │   ├── behavior_analyzer.h/.cpp   burst/I-O classification
+│   ├── workload_io.h/.cpp    loadWorkload() — shared by CLI + GUI
+│   ├── scheduler_factory.h/.cpp  makeScheduler()/algorithmDisplayName() — shared
 │   ├── schedulers/
 │   │   ├── fcfs.cpp
 │   │   ├── sjf.cpp
@@ -133,36 +139,43 @@ ChronOS/
 │   │   ├── mlfq.cpp          (Milestone 3)
 │   │   └── aars.cpp          your algorithm
 │   ├── simulator.h/.cpp      the tick loop + JSON writer
-│   └── main.cpp              CLI entry point
-├── dashboard/                (static site, no build step needed)
-│   ├── index.html
-│   ├── style.css
-│   └── app.js
+│   └── main.cpp              CLI entry point (not part of chronos_core)
+├── app/                      (native Qt6/QML GUI — replaces dashboard/)
+│   ├── ChronosBridge.h/.cpp   in-process engine link + per-tick derived data
+│   ├── WorkloadListModel.h/.cpp  in-app workload file browser
+│   ├── main.cpp
+│   ├── fonts/                 bundled JetBrains Mono + Instrument Serif + OFL licenses
+│   └── qml/                   Theme.qml, Splash.qml, AlgorithmPicker.qml, WorkloadPicker.qml,
+│                               Dashboard.qml + panel components (ARCHITECTURE.md §5.1 has the full list)
 ├── analysis/
 │   └── analysis.py           comparison table + Matplotlib charts
 ├── workloads/
+│   ├── tiny_batch.json
 │   ├── cpu_heavy.json
 │   ├── interactive.json
+│   ├── starvation.json
 │   ├── mixed.json
-│   └── starvation.json
-├── results/                  generated JSON output lands here (gitignored)
+│   ├── io_bound.json
+│   ├── burst_arrivals.json
+│   └── long_tail.json
+├── results/                  generated JSON output lands here (gitignored) — CLI only
 ├── README.md
 └── CMakeLists.txt
 ```
 
-### 4.3 Tech stack (trimmed)
+### 4.3 Tech stack (updated 2026-08-23)
 
 | Layer | Technology | Why |
 |---|---|---|
 | Simulation engine | C++17, standard library only | No external C++ deps to install/debug. STL containers (vector, queue, priority_queue) cover everything you need. |
 | Build system | CMake | Same as your original plan — standard for C++, worth learning. |
-| JSON output | nlohmann/json (single header) | Avoids hand-writing JSON serialization by string concatenation, which is a common source of silent bugs. |
-| Dashboard | Plain HTML/CSS/JS, no framework | You've done small web projects before; a framework (React) adds a build step and a learning curve that buys you nothing here. |
-| Charting (dashboard) | Chart.js via a single script tag | Simple bar/line/Gantt-style charts with minimal API surface. |
+| JSON output | nlohmann/json (single header) | Avoids hand-writing JSON serialization by string concatenation, which is a common source of silent bugs. Still used by the CLI path. |
+| GUI | Qt 6 / QML (Qt Quick), native desktop app | **Changed from the original plain-HTML/CSS/JS plan** — explicit user request for a polished native executable instead of a browser page. See §2.2's logged deviation. |
+| Charting (GUI) | Custom QML (Gantt/score-bar), no charting library | Same reasoning as the original Chart.js-was-never-needed finding — still holds natively. |
 | Analysis | Python 3 + Matplotlib + pandas | As in your original plan — good for static comparison charts across algorithms. |
 | Version control | Git + GitHub | As in your original plan. |
 
-Dropped from your original list: a live socket/API layer, and any requirement for a separate frontend build pipeline. Everything else you listed is kept.
+Dropped from your original list: a live socket/API layer, and any requirement for a separate frontend build pipeline. The GUI toolkit itself changed post-MVP (see above); everything else you listed is kept.
 
 ---
 
@@ -189,12 +202,14 @@ struct Process {
     // behavior tracking (used by AARS + behavior analyzer)
     std::vector<int> burstHistory;   // completed burst lengths so far
     int ioEvents = 0;                // count of times it voluntarily gave up CPU early
-    ProcessClass predictedClass = ProcessClass::UNKNOWN; // CPU_BOUND / IO_BOUND / INTERACTIVE
+    ProcessClass predictedClass = ProcessClass::UNKNOWN; // CPU_BOUND / IO_BOUND / INTERACTIVE / BALANCED
 };
 
 enum class State { NEW, READY, RUNNING, WAITING, TERMINATED };
-enum class ProcessClass { UNKNOWN, CPU_BOUND, IO_BOUND, INTERACTIVE };
+enum class ProcessClass { UNKNOWN, CPU_BOUND, IO_BOUND, INTERACTIVE, BALANCED };
 ```
+
+> ✎ **Revised 2026-08-24 (issue #3):** `BALANCED` was added as a fifth value — it means "has run, but didn't clear either the CPU-bound or short-burst tests." Before it existed, that case fell through to `UNKNOWN`, which made "no opinion yet" and "ran and was unremarkable" the same word. `UNKNOWN` now means exactly one thing: **has not run yet.** The GUI relabels it `PENDING` for that reason. See §6.3 for the full classification rule as implemented.
 
 ### 5.2 Workload input format (JSON)
 
@@ -228,7 +243,8 @@ Each workload preset is just a JSON array — easy to hand-author, easy to gener
       ], "reasonTags": ["short_burst", "aging_bonus:0"] }
   ],
   "processStats": [
-    { "pid": 1, "waitingTime": 6, "turnaroundTime": 9, "responseTime": 3, "completionTime": 11 }
+    { "pid": 1, "arrivalTime": 0, "burstTime": 8, "waitingTime": 6, "turnaroundTime": 9,
+      "responseTime": 3, "completionTime": 11, "contextSwitches": 2, "class": "CPU_BOUND" }
   ],
   "summary": {
     "avgWaitingTime": 5.2, "avgTurnaroundTime": 8.1, "avgResponseTime": 3.0,
@@ -240,6 +256,8 @@ Each workload preset is just a JSON array — easy to hand-author, easy to gener
 This one format is the entire contract between the C++ engine and the dashboard/analysis layer. Get this right early and the rest of the project decouples cleanly — you can work on the dashboard with a hand-written fake JSON file before the engine even runs, and vice versa.
 
 > ✎ **Integration-time addition (Milestone 1):** each `decisionLog[].candidates[]` entry also carries `priority` (the process's `basePriority`), `burstRemaining` (its `remainingTime` at that tick), and `class` (its `predictedClass` as a string) — the original two-field `{pid, score}` shape had nowhere for the dashboard's ready-queue table (EDRD.md §5.3, PRIORITY/BURST/CLASS columns) to source those from, since the JSON has no other per-tick process snapshot. Every scheduler populates all three fields, not just AARS. For AARS specifically, `reasonTags` always includes all five PRD §6.1 formula terms as `"name:±value"` (`base_priority`, `aging_bonus`, `io_bonus`, `response_bonus`, `cpu_burst_penalty`), even when a term is 0 — the why-panel's score-breakdown bar (EDRD §7.1) renders a fixed 5-segment bar and needs every term present on every decision, not only the ones currently contributing.
+>
+> ✎ **Widened 2026-08-24:** `processStats[]` gained four fields, additively — `arrivalTime`, `burstTime`, `contextSwitches`, `class` (the process's final `predictedClass` as a string, §6.3). The native GUI's process HUD (EDRD.md §5.10) needs to describe a finished process on hover without re-reading the workload file alongside the result, and these are exactly the fields `ChronosBridge` (the GUI's engine binding — see ARCHITECTURE.md §5.1) can't otherwise reconstruct from `waitingTime`/`turnaroundTime`/`responseTime`/`completionTime` alone. `analysis.py` (issue #1) should read these fields rather than recompute them from the workload.
 
 ---
 
@@ -269,15 +287,20 @@ The highest-scoring READY process is scheduled next. Ties broken by lowest PID (
 
 ### 6.3 Behavior classification (rule-based, no ML needed)
 
-After each burst completes, append it to that process's `burstHistory` (keep last 5). Recompute:
+After each burst completes, append it to that process's `burstHistory` (keep last 5). Recompute, per process, on every dispatch and at completion (not only when a burst finishes — see the "revised" note below for why):
 
-- `avgBurst = mean(last 5 burst lengths)`
-- `CPU_BOUND` if `avgBurst > 15` ticks
-- `IO_BOUND` if `avgBurst < 4` ticks AND the process has voluntarily yielded (`ioEvents > 0`)
-- `INTERACTIVE` if `avgBurst < 4` ticks AND `responseTime` was low historically (repeatedly re-enters READY quickly after being scheduled)
-- `UNKNOWN` until at least 2 bursts have been observed — new processes start neutral, which is intentionally fair
+- `consumed = burstTime - remainingTime` — CPU already held so far, including mid-burst.
+- `avgBurst = mean(burstHistory)` if any bursts have completed, else `consumed`.
+- `cpuEvidence = max(avgBurst, consumed)` — the strongest signal available, whether or not the current burst has finished.
+- `CPU_BOUND` if `cpuEvidence > 15` ticks.
+- Else, if no burst has completed yet: `UNKNOWN` (still mid-first-burst, not yet long enough to call CPU-bound, and too early to trust the short-burst tests below).
+- Else if `avgBurst < 4` ticks AND `ioEvents > 0`: `IO_BOUND`.
+- Else if `avgBurst < 4` ticks AND `responseTime` was low (`<= kLowResponseTicks`, currently 2): `INTERACTIVE`.
+- Else: `BALANCED` — ran, completed at least one burst, but didn't clear either the CPU-bound or short-burst tests.
 
-> ✎ **EDIT ME:** The exact thresholds (15 ticks, 4 ticks, window of 5) are guesses to seed your testing. Run a few workloads, look at the actual burst-length distributions you generate, and adjust so the three categories actually separate on your data.
+`UNKNOWN` means exactly one thing: **has not run yet** (`burstHistory` empty and `consumed <= 0`). The GUI relabels it `PENDING`. `IO_BOUND` is currently unreachable in practice — nothing in the engine increments `ioEvents` (no I/O model yet, §2.1) — and that's expected, not a bug; don't loosen the condition to make the label appear.
+
+> ✎ **Revised 2026-08-24 (issue #3 — "mostly UNKNOWN on both Milestone-1 presets"):** the original rule (above, superseded) required **two completed bursts** before committing to any label. Under the three non-preemptive algorithms a process runs exactly once and terminates, so it never accumulated a second burst, and nearly every row in the UI read `UNKNOWN` for the entire run — the classifier was effectively dead outside RR/AARS. Two changes fixed it: one completed burst is now enough, and CPU consumed *so far* (mid-burst) counts as CPU-bound evidence, so the label is useful exactly when it matters most — while a long process is still running — rather than only after it finishes. The thresholds themselves (15 ticks, 4 ticks, window of 5, `kLowResponseTicks = 2`) are unchanged from the original guesses; they live as named constants in `engine/behavior_analyzer.cpp` and remain retunable, but any change is a logged decision, not silent drift.
 
 ### 6.4 Dynamic time quantum (used only when AARS preempts on a quantum boundary, similar to Round Robin)
 
@@ -298,7 +321,7 @@ After each burst completes, append it to that process's `burstHistory` (keep las
 
 ## 7. Dashboard Specification
 
-One static HTML page (no login, no routing, no backend) with the following panels. Since it's a replay of a JSON file rather than a live feed, every panel is driven by a single `currentTick` variable in `app.js` that a play/pause/step control advances.
+**Updated 2026-08-23:** this was originally written as a static HTML page; it's now a native Qt/QML desktop app (`app/`, see §2.2's logged deviation and `ARCHITECTURE.md` §5). The panels below are unchanged in content/intent — every panel is still driven by a single `currentTick` value that a play/pause/step control advances, it's just a QML property (`Dashboard.qml`) instead of a JS variable in `app.js`, and the source data is an in-memory `SimulationResult` (via `ChronosBridge`) instead of a loaded JSON file. One panel not listed below was added post-pivot: a per-process progress ticker — see `EDRD.md` §5.8.
 
 ### 7.1 Top bar
 
@@ -337,9 +360,7 @@ This is the single highest-value feature for a demo — it turns AARS from a bla
 
 ### 7.7 Workload + algorithm picker (MVP requirement from your own spec)
 
-A simple form at the top: choose algorithm (dropdown), choose a predefined workload OR set a number of random processes to generate, hit "Run" — which (in the MVP) means: you run the C++ binary yourself with those arguments, it writes `results.json`, and the page reloads that file. This satisfies your stated MVP requirement ("choose the algorithm, choose some process / number of processes, visualize TAT/BT/everything") without needing a live server.
-
-> ✎ **EDIT ME:** If you want the "Run" button to actually invoke the C++ binary directly from the browser (rather than you running it in a terminal), that requires a small local server after all — this is a reasonable Milestone-4 stretch goal (a ~20-line Python `http.server` with one endpoint), not an MVP requirement.
+**Superseded by the pivot (2026-08-23):** this section originally described a form + a manual "run the binary yourself, then reload the page" flow, with a Milestone-4 stretch goal of adding a local server so a "Run" button could invoke the binary directly. That entire stretch goal is now simply how the app works by default: `app/qml/AlgorithmPicker.qml` and `WorkloadPicker.qml` are full-screen picker steps (not a form at the top of the dashboard), workload choice is an in-app file browser (never a native OS file dialog), and RUN calls `ChronosBridge::runSelectedSimulation()` in-process — no server, no manual file reload, no terminal step at all. See `ARCHITECTURE.md` §5.4.
 
 ---
 
@@ -470,7 +491,7 @@ Your original 10-slide structure is solid and needs no real changes — keeping 
 | AARS formula never separates classes cleanly on your synthetic data | Section 6.3 thresholds are explicitly marked as starting guesses — budget real time in Milestone 2 to look at actual burst distributions and retune. |
 | Getting stuck on C++/JSON plumbing | nlohmann/json (single header, well documented) instead of hand-rolled serialization; the fake-JSON-first approach in Milestone 0 decouples dashboard work from engine bugs. |
 | Running out of time before a full 6 algorithms | Milestones are ordered so that stopping after Milestone 2 still yields a complete, presentable 5-algorithm project. |
-| Dashboard becoming a bigger time sink than the scheduler itself | No framework, no build step, Chart.js via script tag (Section 4.3) — deliberately the simplest version that still looks good. |
+| Dashboard becoming a bigger time sink than the scheduler itself | Was: no framework, no build step, Chart.js via script tag. Now (post-pivot, §2.2): `chronos_core` being a shared library means GUI work never risks the scheduler logic itself — a GUI bug can't corrupt engine correctness, and the engine's own CLI regression-tested independently of any GUI changes. |
 | Losing track of what to say in the viva | The decision log (Section 11) is designed to be your answer key — you can point at real logged numbers instead of guessing. |
 
 ---

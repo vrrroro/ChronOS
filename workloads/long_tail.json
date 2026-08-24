@@ -1,0 +1,127 @@
+{
+  "name": "Long-Tail Load",
+  "quantum": 5,
+  "description": "Twenty processes: sixteen short ones (1-4 ticks) and four very long ones (28-40 ticks). The largest preset here, and the one where average waiting time and worst-case waiting time disagree most sharply -- an algorithm can look excellent on the average while one of the long jobs sits unserved for hundreds of ticks.",
+  "processes": [
+    {
+      "pid": 1,
+      "arrivalTime": 0,
+      "burstTime": 34,
+      "priority": 6
+    },
+    {
+      "pid": 2,
+      "arrivalTime": 1,
+      "burstTime": 2,
+      "priority": 4
+    },
+    {
+      "pid": 3,
+      "arrivalTime": 2,
+      "burstTime": 3,
+      "priority": 5
+    },
+    {
+      "pid": 4,
+      "arrivalTime": 3,
+      "burstTime": 1,
+      "priority": 4
+    },
+    {
+      "pid": 5,
+      "arrivalTime": 4,
+      "burstTime": 40,
+      "priority": 7
+    },
+    {
+      "pid": 6,
+      "arrivalTime": 5,
+      "burstTime": 2,
+      "priority": 5
+    },
+    {
+      "pid": 7,
+      "arrivalTime": 6,
+      "burstTime": 4,
+      "priority": 3
+    },
+    {
+      "pid": 8,
+      "arrivalTime": 7,
+      "burstTime": 1,
+      "priority": 5
+    },
+    {
+      "pid": 9,
+      "arrivalTime": 8,
+      "burstTime": 28,
+      "priority": 6
+    },
+    {
+      "pid": 10,
+      "arrivalTime": 9,
+      "burstTime": 3,
+      "priority": 4
+    },
+    {
+      "pid": 11,
+      "arrivalTime": 10,
+      "burstTime": 2,
+      "priority": 5
+    },
+    {
+      "pid": 12,
+      "arrivalTime": 11,
+      "burstTime": 4,
+      "priority": 4
+    },
+    {
+      "pid": 13,
+      "arrivalTime": 12,
+      "burstTime": 1,
+      "priority": 5
+    },
+    {
+      "pid": 14,
+      "arrivalTime": 13,
+      "burstTime": 32,
+      "priority": 7
+    },
+    {
+      "pid": 15,
+      "arrivalTime": 14,
+      "burstTime": 3,
+      "priority": 3
+    },
+    {
+      "pid": 16,
+      "arrivalTime": 15,
+      "burstTime": 2,
+      "priority": 5
+    },
+    {
+      "pid": 17,
+      "arrivalTime": 16,
+      "burstTime": 4,
+      "priority": 4
+    },
+    {
+      "pid": 18,
+      "arrivalTime": 17,
+      "burstTime": 1,
+      "priority": 5
+    },
+    {
+      "pid": 19,
+      "arrivalTime": 18,
+      "burstTime": 3,
+      "priority": 4
+    },
+    {
+      "pid": 20,
+      "arrivalTime": 19,
+      "burstTime": 2,
+      "priority": 5
+    }
+  ]
+}

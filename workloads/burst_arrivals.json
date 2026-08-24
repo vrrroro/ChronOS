@@ -1,0 +1,103 @@
+{
+  "name": "Clustered Arrivals",
+  "quantum": 3,
+  "description": "Sixteen processes arriving in four tight clusters with idle gaps between them -- a thundering-herd pattern. Each cluster floods an empty ready queue at once, so the scheduler's tie-breaking rule is doing most of the visible work.",
+  "processes": [
+    {
+      "pid": 1,
+      "arrivalTime": 0,
+      "burstTime": 4,
+      "priority": 5
+    },
+    {
+      "pid": 2,
+      "arrivalTime": 0,
+      "burstTime": 6,
+      "priority": 4
+    },
+    {
+      "pid": 3,
+      "arrivalTime": 1,
+      "burstTime": 3,
+      "priority": 6
+    },
+    {
+      "pid": 4,
+      "arrivalTime": 1,
+      "burstTime": 5,
+      "priority": 5
+    },
+    {
+      "pid": 5,
+      "arrivalTime": 12,
+      "burstTime": 5,
+      "priority": 4
+    },
+    {
+      "pid": 6,
+      "arrivalTime": 12,
+      "burstTime": 3,
+      "priority": 6
+    },
+    {
+      "pid": 7,
+      "arrivalTime": 13,
+      "burstTime": 7,
+      "priority": 5
+    },
+    {
+      "pid": 8,
+      "arrivalTime": 13,
+      "burstTime": 4,
+      "priority": 5
+    },
+    {
+      "pid": 9,
+      "arrivalTime": 26,
+      "burstTime": 3,
+      "priority": 6
+    },
+    {
+      "pid": 10,
+      "arrivalTime": 26,
+      "burstTime": 8,
+      "priority": 4
+    },
+    {
+      "pid": 11,
+      "arrivalTime": 27,
+      "burstTime": 4,
+      "priority": 5
+    },
+    {
+      "pid": 12,
+      "arrivalTime": 27,
+      "burstTime": 5,
+      "priority": 6
+    },
+    {
+      "pid": 13,
+      "arrivalTime": 40,
+      "burstTime": 6,
+      "priority": 5
+    },
+    {
+      "pid": 14,
+      "arrivalTime": 40,
+      "burstTime": 3,
+      "priority": 4
+    },
+    {
+      "pid": 15,
+      "arrivalTime": 41,
+      "burstTime": 5,
+      "priority": 6
+    },
+    {
+      "pid": 16,
+      "arrivalTime": 41,
+      "burstTime": 4,
+      "priority": 5
+    }
+  ]
+}

@@ -1,66 +1,10 @@
-#include <cstring>
-#include <fstream>
 #include <iostream>
 #include <memory>
-#include <sstream>
 
-#include "json.hpp"
 #include "process.h"
 #include "simulator.h"
-#include "schedulers/fcfs.h"
-#include "schedulers/sjf.h"
-#include "schedulers/round_robin.h"
-#include "schedulers/priority.h"
-#include "schedulers/aars.h"
-
-using json = nlohmann::json;
-
-namespace {
-
-Workload loadWorkload(const std::string& path) {
-    std::ifstream in(path);
-    if (!in) {
-        throw std::runtime_error("could not open workload file: " + path);
-    }
-    json j;
-    in >> j;
-
-    Workload w;
-    w.name = j.value("name", path);
-    w.quantum = j.value("quantum", 4);
-
-    int pidCounter = 1;
-    for (const auto& jp : j.at("processes")) {
-        Process p;
-        p.pid = jp.value("pid", pidCounter++);
-        p.arrivalTime = jp.at("arrivalTime").get<int>();
-        p.burstTime = jp.at("burstTime").get<int>();
-        p.remainingTime = p.burstTime;
-        p.basePriority = jp.value("priority", 5);
-        w.processes.push_back(p);
-    }
-    return w;
-}
-
-std::unique_ptr<Scheduler> makeScheduler(const std::string& algorithm, const Workload& workload) {
-    if (algorithm == "fcfs") return std::make_unique<FCFSScheduler>();
-    if (algorithm == "sjf") return std::make_unique<SJFScheduler>();
-    if (algorithm == "rr") return std::make_unique<RoundRobinScheduler>(workload.quantum);
-    if (algorithm == "priority") return std::make_unique<PriorityScheduler>();
-    if (algorithm == "aars") return std::make_unique<AARSScheduler>();
-    throw std::runtime_error("unknown algorithm: " + algorithm + " (expected fcfs|sjf|rr|priority|aars)");
-}
-
-std::string algorithmDisplayName(const std::string& algorithm) {
-    if (algorithm == "fcfs") return "FCFS";
-    if (algorithm == "sjf") return "SJF";
-    if (algorithm == "rr") return "Round Robin";
-    if (algorithm == "priority") return "Priority";
-    if (algorithm == "aars") return "AARS";
-    return algorithm;
-}
-
-} // namespace
+#include "workload_io.h"
+#include "scheduler_factory.h"
 
 int main(int argc, char** argv) {
     std::string algorithm, workloadPath, outPath;

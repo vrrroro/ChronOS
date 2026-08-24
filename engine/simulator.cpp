@@ -88,7 +88,16 @@ SimulationResult runSimulation(const Workload& workload, Scheduler& scheduler, c
         for (auto& p : readyQueue) p.waitingTime++;
 
         // 3. (Re)classify anyone whose burst history may have changed.
+        //    The running process is held outside readyQueue while dispatched,
+        //    so classifying only the queue meant the one process actually
+        //    accumulating evidence was the one never being classified — it
+        //    would re-enter READY still labelled UNKNOWN. Classify it too.
         BehaviorAnalyzer::updateClassifications(readyQueue);
+        if (hasRunning) {
+            std::vector<Process> justRunning{running};
+            BehaviorAnalyzer::updateClassifications(justRunning);
+            running.predictedClass = justRunning.front().predictedClass;
+        }
 
         // 4. Scheduling decision.
         if (!hasRunning || quantumRemaining == 0) {
@@ -204,7 +213,19 @@ SimulationResult runSimulation(const Workload& workload, Scheduler& scheduler, c
     // Build processStats + summary from completed processes.
     double sumWaiting = 0, sumTurnaround = 0, sumResponse = 0;
     for (const auto& p : completed) {
-        result.processStats.push_back(ProcessStat{p.pid, p.waitingTime, p.turnaroundTime, p.responseTime, p.completionTime});
+        Process finalP = p;
+        {
+            // Reclassify once more at completion: by now the full burst
+            // history exists, so this is the most informed verdict available
+            // and it is what the UI reports for a finished process.
+            std::vector<Process> one{finalP};
+            BehaviorAnalyzer::updateClassifications(one);
+            finalP.predictedClass = one.front().predictedClass;
+        }
+        result.processStats.push_back(ProcessStat{p.pid, p.waitingTime, p.turnaroundTime,
+                                                  p.responseTime, p.completionTime,
+                                                  p.arrivalTime, p.burstTime,
+                                                  p.contextSwitches, finalP.predictedClass});
         sumWaiting += p.waitingTime;
         sumTurnaround += p.turnaroundTime;
         sumResponse += p.responseTime;
@@ -246,7 +267,10 @@ void writeResultJson(const SimulationResult& result, const std::string& outPath)
     for (const auto& p : result.processStats) {
         j["processStats"].push_back({{"pid", p.pid}, {"waitingTime", p.waitingTime},
                                       {"turnaroundTime", p.turnaroundTime}, {"responseTime", p.responseTime},
-                                      {"completionTime", p.completionTime}});
+                                      {"completionTime", p.completionTime},
+                                      {"arrivalTime", p.arrivalTime}, {"burstTime", p.burstTime},
+                                      {"contextSwitches", p.contextSwitches},
+                                      {"class", processClassToString(p.predictedClass)}});
     }
 
     j["summary"] = {

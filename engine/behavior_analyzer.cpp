@@ -1,5 +1,6 @@
 #include "behavior_analyzer.h"
 
+#include <algorithm>
 #include <numeric>
 
 namespace BehaviorAnalyzer {
@@ -37,24 +38,60 @@ void recordCompletedBurst(Process& p, int burstLength) {
     }
 }
 
+// Revised 2026-08-24 (logged, see PRD.md §6.3): classification used to require
+// **two** completed bursts before it would commit to anything, and to look only
+// at completed bursts. Under the three non-preemptive algorithms a process runs
+// exactly once and then terminates, so it never accumulated a second burst and
+// every row in the UI read UNKNOWN for the entire run — the classifier was
+// effectively dead outside RR and AARS, and UNKNOWN meant "the analyzer never
+// got to speak", which is not something a viewer can be expected to infer.
+//
+// Two changes fix that without loosening what the labels mean:
+//
+//   1. One completed burst is enough. A process that has run 22 ticks to
+//      completion is CPU-bound on any reading; demanding a second sample only
+//      withholds a conclusion already supported by the evidence.
+//   2. CPU consumed *so far* counts as evidence for the CPU_BOUND case, even
+//      mid-burst. A process that has already held the CPU for more than the
+//      threshold is CPU-bound whether or not it has finished — waiting for it
+//      to finish before saying so is the classifier being least useful exactly
+//      when the information matters most.
+//
+// UNKNOWN now means only "has not run yet", which is a state a viewer can see
+// for themselves on the timeline, and the UI labels it PENDING to say so.
 void updateClassifications(std::vector<Process>& processes) {
     for (Process& p : processes) {
-        if (p.burstHistory.size() < 2) {
-            p.predictedClass = ProcessClass::UNKNOWN;
+        // Ticks of CPU this process has consumed across all its slices.
+        const int consumed = p.burstTime - p.remainingTime;
+
+        if (p.burstHistory.empty() && consumed <= 0) {
+            p.predictedClass = ProcessClass::UNKNOWN;  // genuinely nothing to go on
             continue;
         }
 
-        double avgBurst = averageBurst(p.burstHistory);
+        const double avgBurst = p.burstHistory.empty()
+                                    ? static_cast<double>(consumed)
+                                    : averageBurst(p.burstHistory);
 
-        if (avgBurst > kCpuBoundThreshold) {
+        // For the CPU-bound test, take the strongest evidence available: a
+        // long *current* run counts even if no burst has completed yet.
+        const double cpuEvidence = std::max(avgBurst, static_cast<double>(consumed));
+
+        if (cpuEvidence > kCpuBoundThreshold) {
             p.predictedClass = ProcessClass::CPU_BOUND;
+        } else if (p.burstHistory.empty()) {
+            // Still mid-first-burst and not yet long enough to be CPU-bound.
+            // The short-burst classes below need a *completed* burst: a process
+            // three ticks into a thirty-tick run would otherwise be labelled
+            // interactive purely because it has not run long yet.
+            p.predictedClass = ProcessClass::UNKNOWN;
         } else if (avgBurst < kShortBurstThreshold && p.ioEvents > 0) {
             p.predictedClass = ProcessClass::IO_BOUND;
         } else if (avgBurst < kShortBurstThreshold &&
                    p.responseTime >= 0 && p.responseTime <= kLowResponseTicks) {
             p.predictedClass = ProcessClass::INTERACTIVE;
         } else {
-            p.predictedClass = ProcessClass::UNKNOWN;
+            p.predictedClass = ProcessClass::BALANCED;
         }
     }
 }

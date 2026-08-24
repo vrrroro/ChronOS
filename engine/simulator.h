@@ -26,6 +26,13 @@ struct ProcessStat {
     int turnaroundTime;
     int responseTime;
     int completionTime;
+    // Added 2026-08-24 (PRD.md §5.3, additive — no existing field changed):
+    // the inputs and the final verdict a consumer needs to describe a finished
+    // process without re-reading the workload file alongside the result.
+    int arrivalTime = 0;
+    int burstTime = 0;
+    int contextSwitches = 0;
+    ProcessClass predictedClass = ProcessClass::UNKNOWN;
 };
 
 struct Summary {

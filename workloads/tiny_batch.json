@@ -1,0 +1,25 @@
+{
+  "name": "Tiny Batch",
+  "quantum": 2,
+  "description": "Three processes arriving within two ticks, no priority spread. The smallest workload that still separates FCFS from SJF: run both and the ordering flips. Small enough to verify every waiting and turnaround number by hand.",
+  "processes": [
+    {
+      "pid": 1,
+      "arrivalTime": 0,
+      "burstTime": 8,
+      "priority": 5
+    },
+    {
+      "pid": 2,
+      "arrivalTime": 1,
+      "burstTime": 6,
+      "priority": 5
+    },
+    {
+      "pid": 3,
+      "arrivalTime": 2,
+      "burstTime": 2,
+      "priority": 5
+    }
+  ]
+}

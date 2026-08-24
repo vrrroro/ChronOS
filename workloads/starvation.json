@@ -1,0 +1,67 @@
+{
+  "name": "Starvation Stress Test",
+  "quantum": 4,
+  "description": "One long, low-priority process (P1, 30 ticks, priority 9) arrives first, then a steady stream of short high-priority work keeps cutting in front of it. Under plain Priority scheduling P1 starves outright; the point of this preset is to make aging visible, so watch P1's aging bonus climb until it finally wins the CPU.",
+  "processes": [
+    {
+      "pid": 1,
+      "arrivalTime": 0,
+      "burstTime": 30,
+      "priority": 9
+    },
+    {
+      "pid": 2,
+      "arrivalTime": 2,
+      "burstTime": 3,
+      "priority": 1
+    },
+    {
+      "pid": 3,
+      "arrivalTime": 4,
+      "burstTime": 2,
+      "priority": 1
+    },
+    {
+      "pid": 4,
+      "arrivalTime": 6,
+      "burstTime": 4,
+      "priority": 2
+    },
+    {
+      "pid": 5,
+      "arrivalTime": 8,
+      "burstTime": 3,
+      "priority": 1
+    },
+    {
+      "pid": 6,
+      "arrivalTime": 10,
+      "burstTime": 2,
+      "priority": 2
+    },
+    {
+      "pid": 7,
+      "arrivalTime": 12,
+      "burstTime": 4,
+      "priority": 1
+    },
+    {
+      "pid": 8,
+      "arrivalTime": 14,
+      "burstTime": 3,
+      "priority": 2
+    },
+    {
+      "pid": 9,
+      "arrivalTime": 16,
+      "burstTime": 2,
+      "priority": 1
+    },
+    {
+      "pid": 10,
+      "arrivalTime": 18,
+      "burstTime": 3,
+      "priority": 2
+    }
+  ]
+}
