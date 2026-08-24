@@ -143,6 +143,7 @@ Item {
                     Layout.minimumHeight: 110
                     currentTick: root.currentTick
                     maxTick: root.maxTick
+                    ticksPerSecond: root.ticksPerSecond
                 }
 
                 ProcessTicker {

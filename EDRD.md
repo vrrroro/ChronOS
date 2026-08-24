@@ -30,6 +30,14 @@ Scope: This document covers **only** the dashboard's visual design and interacti
 >
 > Non-green color is therefore back in the system, deliberately and under rules: every hue owns exactly one role (§2.5), every role is redundantly encoded in a word, sign or glyph (§2.6), and the palette table in §2.1 is still closed.
 
+> **Logged deviation — glyph removal, green-only frames, and playhead speed fix (2026-08-25, explicit user request):** five changes, all reported as concrete problems after using the running build. Point 1 directly reverses point 6 of the 24b list above.
+>
+> 1. **Per-process identity dropped the glyph channel** (§2.3) — hue alone now, no `█ ▓ ▒ ░ ║ ≡ · #` fill character per process anywhere (Gantt, ticker, ready queue, HUD). `Theme.procGlyph`/`procGlyphs` no longer exist.
+> 2. **The ticker's `FluidBar` fill is now tiny segmented blocks**, not one continuous rectangle (§6.9) — still liquid via independently-eased segments and a sheen spanning the whole filled run, just visually divided into cells.
+> 3. **Every pane border is green, always** (§2.4) — `WhyPanel`'s cyan and `AgingIndicator`'s amber accent borders are gone; role hues now govern only pane *content*, never the frame.
+> 4. **The why-panel's chosen-process verdict is colored by that process's own hue**, not a fixed magenta (§2.3) — the same color it wears in the Gantt chart and ticker, so a process can be tracked by color across every panel.
+> 5. **The Gantt playhead's move animation now scales its duration with the current playback speed** (§5.2), not the fixed 1× rate — at higher speed multipliers it previously fell further and further behind the actual tick instead of tracking it.
+
 ---
 
 ## 1. Design Intent
@@ -46,7 +54,7 @@ A jet-black phosphor terminal — ASCII-framed panes, a blinking block cursor, r
 
 ### 1.3 Design principles
 
-1. **Encode in glyphs before reaching for hue.** Jet black plus one phosphor green, taken literally, would make eight concurrent processes indistinguishable — but the fix is not to smuggle a rainbow back in. Monospace hands us a second encoding channel for free: fill glyphs (`█ ▓ ▒ ░ ║ ≡ · #`), brightness steps, brackets and signs. Exhaust those first. Hue is a last resort, and only amber (WAITING) and red (error/negative) are licensed (§2.2, §2.5) — each always paired with a glyph or sign so it never carries meaning alone.
+1. **Encode in words, brackets and signs before reaching for hue for anything that isn't per-process identity.** Every §2.5 *role* (warnings, deltas, the why-panel's reasoning) is redundantly encoded in a bracketed word or a sign, never carried by hue alone. Per-process identity (§2.3) is the one deliberate exception, as of 2026-08-25: it's hue-only, with no fallback encoding, traded for a quieter, simpler visual at explicit user request.
 2. **Every panel earns its position through information hierarchy**, not decoration. The CPU timeline and the "why this process" panel are the two panels a viewer's eye should land on first — everything else supports them.
 3. **State is always visible.** A viewer glancing at the screen at any random moment should be able to tell, without explanation: what's running, what's waiting, and why the scheduler just did what it did.
 4. **Motion explains, it doesn't decorate.** Every animation in Section 6 exists to make a state change easier to follow (a preemption, a score change, a new arrival) — never purely ornamental.
@@ -95,44 +103,47 @@ These map to the `State` enum in `PRD.md` Section 5.1 and must be used consisten
 | TERMINATED | `stateTerminated` | `#1F521F` | Dimmed to near-background — done, no longer competing for attention. Badge reads `[DONE]` |
 | NEW (not yet arrived) | `stateNew` | `#12300F` | Barely-there outline only — hasn't entered the system yet |
 
-### 2.3 Per-process identity (rewritten 2026-08-24b — neon hue **and** glyph, two channels)
+### 2.3 Per-process identity (revised 2026-08-25 — neon hue only, one channel)
 
-Each process is assigned **both** a neon hue and an ASCII fill glyph.
+Each process is assigned a neon hue and **nothing else**. There is no per-process glyph or symbol any more.
 
-This supersedes the glyph-plus-green-brightness rule of 2026-08-24, which the user rejected. Eight steps of one hue are eight steps a viewer has to *compare* rather than *recognize*, and at ticker size the middle four were not reliably separable at all. It also supersedes the hue-only palette that preceded that. Keeping both channels is what lets this be colorful without becoming fragile: the hue does the work at a glance, and the glyph is what keeps the encoding honest under a washed-out projector, a greyscale print, or deuteranopia — exactly what hue alone cannot promise.
+This supersedes the 2026-08-24b hue-and-glyph scheme (below, for history) at explicit user request: the second channel added visual noise — a distinct fill character per process, repeated across every bar and segment — without being asked for, and the user wants every process rendered in the *same shape* everywhere (a plain `P<pid>` label, a solid/segmented fill) with color as the only differentiator. It also supersedes the glyph-plus-green-brightness rule of 2026-08-24, and the hue-only palette that preceded that (this is now the third and current stop on that history).
 
-| Slot | Glyph | Hue name | Hex |
-|---|---|---|---|
-| 0 | `█` | phosphor green | `#33FF00` |
-| 1 | `▓` | cyan | `#00E5FF` |
-| 2 | `▒` | magenta | `#FF3EC9` |
-| 3 | `░` | amber | `#FFB000` |
-| 4 | `║` | blue | `#4D9FFF` |
-| 5 | `≡` | orange | `#FF7A29` |
-| 6 | `·` | violet | `#C77DFF` |
-| 7 | `#` | lime | `#D4FF3E` |
+| Slot | Hue name | Hex |
+|---|---|---|
+| 0 | phosphor green | `#33FF00` |
+| 1 | cyan | `#00E5FF` |
+| 2 | magenta | `#FF3EC9` |
+| 3 | amber | `#FFB000` |
+| 4 | blue | `#4D9FFF` |
+| 5 | orange | `#FF7A29` |
+| 6 | violet | `#C77DFF` |
+| 7 | lime | `#D4FF3E` |
 
 Green leads the palette because it is the app's own color, and the remaining seven are spaced around the wheel so **adjacent PIDs never sit adjacent in hue** — P1 and P2 are the pair a viewer most often has to tell apart, so they are the pair placed furthest apart.
 
-Assignment rule: `slot = pid % 8`, deterministic, so a given PID renders identically everywhere — Gantt segment, ready-queue stripe, ticker bar, process HUD, legend.
+Assignment rule: `slot = pid % 8`, deterministic, so a given PID renders identically everywhere — Gantt segment, ready-queue row, ticker bar, process HUD, why-panel verdict.
 
-Where each channel is used:
+Where the hue is used — always as the color of the `P<pid>` text itself, or of the fill it identifies, never as a separate swatch or symbol next to it:
 
-- **Gantt segments (§5.2):** border and glyph fill in the process's hue, and the centered `P<id>` label drawn in that same hue. The glyph fill sits behind at low opacity so the label stays the thing you read.
-- **Ticker bars (§5.8):** the liquid fill (§6.9) is the process's hue.
-- **Ready-queue rows and legends:** a single-character glyph cell in the process's hue, immediately left of the PID.
-- **Text labels:** always the literal `P1`, `P2`. The glyph supplements the PID; it never replaces it.
+- **Gantt segments (§5.2):** the segment border and the centered `P<id>` label are drawn in the process's hue. No fill glyph — the segment body is otherwise flat `bgVoid`.
+- **Ticker bars (§5.8):** the segmented liquid fill (§6.9) is the process's hue; the `P<id>` label to its left is that same hue in every state (running, waiting, done) — not dimmed to a generic color when the process isn't currently running, so a viewer can track one process's color continuously across the run.
+- **Ready-queue rows:** the `PID` column text itself is the process's hue.
+- **Why-panel verdict (§5.4):** `"P<pid> RUNS NEXT"` is drawn in that process's hue, not a fixed accent — this is the same color the process wears everywhere else, so "which process is this" reads as one consistent color across the whole dashboard rather than a WhyPanel-only convention.
 
 Two hues here (`#FFB000` amber, `#4D9FFF` blue) are also role colors in §2.5. That overlap is safe because identity always appears **attached to a process** — on its bar, its row, its label — and never on a standalone badge or a signed delta, which is where the role meaning lives. See §2.4.
 
+> **History — 2026-08-24b's two-channel version (superseded):** each process briefly also carried an ASCII fill glyph (`█ ▓ ▒ ░ ║ ≡ · #`, one per slot) alongside its hue, reasoned as an accessibility fallback for greyscale/projector/deuteranopia viewing. Removed 2026-08-25 at explicit user request. If that accessibility concern needs revisiting later, don't just re-add the old glyph table by default — ask first, since removing it was a deliberate simplification, not an oversight.
+
 ### 2.4 Identity vs. state
 
-Identity (§2.3 — glyph + shade) and state (§2.2 — color) are two separate channels and must stay separate:
+Identity (§2.3 — hue) and state (§2.2 — color) are two separate channels and must stay separate:
 
-- **Identity** drives a process's bar fill, segment border, PID label and row stripe. Constant for the whole run, regardless of what the process is doing.
+- **Identity** drives a process's bar fill, segment border, and PID label. Constant for the whole run, regardless of what the process is doing.
 - **State** drives bracketed badges, status text and pane borders — `textPrimary` for RUNNING, `accentAmber` for WAITING, `borderMuted` for TERMINATED. Badges are always **bracketed words** (`[RUNNING]`, `[WAIT]`, `[DONE]`), never hue alone.
-- A running P3 therefore reads as: a `░`-glyphed bar filling in amber `#FFB000` (identity), inside a pane whose border has snapped to `borderActive`, with a `[RUNNING]` badge in `textPrimary` (state).
+- A running P3 therefore reads as: a segmented bar filling in amber `#FFB000` with its `P3` label in that same amber (identity), inside a pane whose border has snapped to `borderActive` green, with a `[RUNNING]` badge in `textPrimary` (state).
 - **State never borrows an identity hue, and identity never borrows a state hue.** This is what keeps the reintroduced palette from turning ambiguous: P3's amber bar is not a WAITING signal, because a WAITING signal is a bracketed `[WAIT]` badge and a bar is not a badge. Intensity, not hue, is how a bar shows state — the running process's fill is at full strength and every other bar is dimmed (§6.9).
+- **Pane borders never carry a role hue either (revised 2026-08-25, explicit user request).** Every `TerminalPane` border is green — `borderActive` when that pane is active/engaged, `borderMuted` otherwise — full stop, regardless of what role-colored content lives inside it. `WhyPanel` (cyan) and `AgingIndicator` (amber) previously claimed their own accent border under §2.5's role system; that's gone. The role hue still governs *content* inside the pane — the chosen-process verdict, warning badges, reason deltas — just never the frame around it.
 
 ### 2.4a Phosphor glow (2026-08-24, replaces the layered-border glow; dimmed + flicker added 2026-08-24b)
 
@@ -183,7 +194,7 @@ The two most important roles get the two hues furthest from the app's green chro
 - Any text sitting on a filled green surface (an inverted-video button, a RUNNING badge, a filled Gantt segment) uses `textOnAccent` (`#0A0A0A`). Never green-on-green.
 - The scanline overlay (§2.7) is capped at 0.10 alpha precisely so it cannot push any ratio below AA. Do not raise it.
 - Every §2.5 role hue and §2.3 identity hue clears AA on `#0A0A0A` (computed, not estimated): lime `#D4FF3E` 17.1:1, green `#33FF00` 14.6:1, cyan `#00E5FF` 12.9:1, amber `#FFB000` 10.8:1, orange `#FF7A29` 7.6:1, violet `#C77DFF` 7.4:1, blue `#4D9FFF` 7.3:1, magenta `#FF3EC9` 6.4:1, red `#FF3333` 5.4:1. Magenta and red are the two nearest the `textDim` floor of 4.7:1 — neither is used below `data` size, and neither is ever the *only* carrier of its meaning.
-- Colorblind consideration: green/red is the hardest pairing for deuteranopia, and this system leans on it for score deltas. **Always pair the color with a `+`/`−` sign and a `▲`/`▼`**, never hue alone. Per-process identity (§2.3) carries a fill glyph alongside its hue for the same reason — a deuteranopic viewer reads the bars by their fill character even when several hues collapse toward one tone. Reintroducing hue in §2.3 did **not** remove that fallback; it added a channel on top of it. Likewise every §2.5 role is redundantly encoded: `[DONE]` is a word, not just blue; a `✓` marks a reason, not just cyan.
+- Colorblind consideration: green/red is the hardest pairing for deuteranopia, and this system leans on it for score deltas. **Always pair the color with a `+`/`−` sign and a `▲`/`▼`**, never hue alone. Per-process identity (§2.3) is hue-only as of 2026-08-25 and has no fallback channel for a deuteranopic viewer or a greyscale render — that tradeoff was made explicitly, at the user's request, in exchange for a simpler, quieter visual (see §2.3's history note). Every §2.5 *role*, unlike identity, is still redundantly encoded: `[DONE]` is a word, not just blue; a `✓` marks a reason, not just cyan.
 
 ---
 
@@ -197,9 +208,9 @@ These treatments *are* the aesthetic — not optional decoration, and not a lice
 4. **The cursor is the heartbeat.** A `█` block cursor blinks at ~530ms on the splash prompt, on empty states, on the currently-RUNNING row, and in any focused input. It is the only continuous animation in the operational UI.
 5. **Shell metaphors in copy.** Prompts (`>`, `$`, `chronos@aars:~$`), flags (`--algorithm fcfs`), status codes (`[OK]`, `[WAIT]`, `[ERR]`, `[DONE]`, `[RUNNING]`). Empty states read like shell output: `> no process ready_`. Button labels are bracketed: `[ RUN ]`, `[ ▶ PLAY ]`, `[ ↺ RESET ]`.
 6. **ASCII separators.** `--------` between related rows, `========` between sections, `//` for inline breaks — repeated characters sized to their container, not `Rectangle` hairlines.
-7. **Raw bar readouts.** Quantities read as character bars, never as smooth fills: `[||||||||······] 61%`. Score-breakdown bars, aging meters, the workload-card load factor and the scrub track all use the §2.3 fill glyphs. No gradients, no rounded caps.
+7. **Raw bar readouts.** Quantities read as character bars, never as smooth fills: `[||||||||······] 61%`. Score-breakdown bars, aging meters, the workload-card load factor and the scrub track all use plain `|`/`·` fill characters (not a per-process glyph — §2.3 identity is hue-only). No gradients, no rounded caps.
 
-   **Logged deviation (2026-08-24b) — the process ticker's progress bars are not character bars.** Everything above is read as a *value*; the ticker bars (§5.8) are read as *motion* — the entire point of that panel is watching work drain away. A glyph bar can only move in whole-cell steps, so at one tick per cell it is a row of characters switching on and off, which is the opposite of the fluid feel the user asked for. `FluidBar.qml` therefore fills continuously (§6.9) while keeping every other Terminal CLI property: zero radius, flat color, 1px frame, no gradient, no rounded cap. Gantt segments keep their glyph fill; only the ticker moved.
+   **Logged deviation (2026-08-24b, revised 2026-08-25) — the process ticker's progress bars are not character bars.** Everything above is read as a *value*; the ticker bars (§5.8) are read as *motion* — the entire point of that panel is watching work drain away. A glyph bar can only move in whole-cell steps, so at one tick per cell it is a row of characters switching on and off, which is the opposite of the fluid feel the user asked for. `FluidBar.qml` therefore fills via tiny segmented blocks that each ease their own width independently (§6.9) while keeping every other Terminal CLI property: zero radius, flat color, 1px frame, no gradient, no rounded cap. Gantt segments (§5.2) have no fill glyph at all as of 2026-08-25 — just a hue-colored border and centered `P<id>` label on flat `bgVoid`.
 8. **CRT scanlines.** A fixed, full-window horizontal line pattern (~3–4px period, **≤ 0.10 alpha**) as the front-most layer, above everything. Must be `enabled: false` so it can never swallow a click.
 9. **Typewriter reveal.** Screen-level headings and the why-panel's verdict line type in character-by-character on first appearance (~18ms/char, skippable on click or keypress). Once per screen entry only — never on data that updates every tick, which would be unreadable.
 10. **Strict character grid.** Columns align to the mono advance width. Anything tabular is laid out in fixed character-count columns rather than by measuring proportional text.
@@ -352,12 +363,14 @@ Every panel (CPU Timeline, Ready Queue, Why-Panel, Waiting List) shares one visu
 ### 5.2 CPU Timeline / Gantt chart (rewritten 2026-08-24b — per-segment boundary labels)
 
 - Track background: `bgInset`, full width of the left column, horizontally scrollable if the run is longer than the panel width.
-- **Each segment** is a zero-radius 1px-framed block in the process's §2.3 hue, filled with that process's repeated glyph at low opacity, with the `P<id>` label **centered** in the same hue on a `bgVoid` ground so the glyph fill underneath cannot make it muddy. The label is drawn whenever the segment is wide enough to hold it plus padding, and omitted otherwise — never clipped.
+- **Each segment** is a zero-radius 1px-framed block on flat `bgVoid`, bordered in the process's §2.3 hue, with the `P<id>` label **centered** in that same hue. **No fill glyph as of 2026-08-25** (explicit user request) — the segment body carries no texture at all, just the border and the centered label; color alone identifies the process. The label is drawn whenever the segment is wide enough to hold it plus padding, and omitted otherwise — never clipped.
 - **Segment state is intensity, not hue** (§2.4): the segment under the playhead takes a 2px border and a brighter fill; already-elapsed segments take a darkened border; not-yet-reached segments sit at `borderMuted` with a dimmed label.
 
 **Tick labels sit on the segment boundaries, not on a fixed ruler** (revised 2026-08-24b, on explicit user feedback). The old design drew a ruler underneath marking every fifth tick — `0 5 10 15` on a fixed grid. That answers a question nobody asks. The question this chart exists to answer is *"when did P1 hand over?"*, and a fixed grid answers it only by making the viewer eyeball a segment edge against the nearest gridline.
 
 So each segment now carries **its own start tick, directly above its own left edge**, with a hairline dropping to the boundary it labels so the number is unambiguously attached to an edge even when segments are only a few pixels wide. The final segment additionally draws its end tick, right-aligned. Every other segment's end *is* the next segment's start, so drawing both would print every number on the axis twice.
+
+**The playhead's move animation scales its duration with the current playback rate, not the fixed 1x rate** (fixed 2026-08-25). At higher speed multipliers the tick interval shrinks; an animation duration computed from the fixed 1x base rate no longer finishes before the next tick retargets it, so the playhead visibly falls behind and never catches up — it "moves slow and doesn't snap," in the terms it was reported in. `GanttChart.qml` takes a `ticksPerSecond` property (the *current* rate, `Theme.baseTicksPerSecond * speed`) and caps the animation duration at a fraction of the current tick interval, so it always finishes before the next tick — eased, never instant, but never lagging either.
 
 A boundary label brightens to its process's hue once the playhead has reached it, so the axis fills in as the run proceeds and a viewer can read the elapsed schedule off the chart directly: `0` … P1 … `3` … P2 … `9`.
 
@@ -416,9 +429,9 @@ The pickers are no longer a footer control strip inside the dashboard. In the na
 Added at explicit request; the one panel here with no ancestor in the original web spec.
 
 - One row per process, stacked vertically, each row a horizontal progress bar that fills tick by tick and reaches 100% exactly at that process's `completionTime`.
-- Row anatomy: identity glyph · `P<id>` label · the bar · a right-aligned readout.
+- Row anatomy: `P<id>` label · the bar · a right-aligned readout. No identity glyph (§2.3 is hue-only as of 2026-08-25).
 - **The bar is a `FluidBar`, not a character bar** — the one logged exception to §2.7(7), because this panel is read as motion rather than as a value. Fill color is the process's §2.3 hue; motion spec in §6.9.
-- The `P<id>` label is drawn in the process's own hue while it is running, and in `textSecondary` otherwise — so the row that currently owns the CPU is identifiable from the label alone, with the bar as confirmation.
+- **The `P<id>` label is drawn in the process's own hue in every state** (revised 2026-08-25, explicit user request) — running, waiting, or done — not dimmed to `textSecondary` when it isn't the currently-running row. A viewer tracking "which one is P3" needs that color to stay put across the whole run, not just while P3 happens to be on the CPU. `font.weight` still goes bold while running, so the currently-owning row is still distinguishable — just not by losing its color when it isn't.
 - Processes that have not yet arrived render at reduced opacity, so a viewer can see the whole cast of the workload from tick 0 and watch them switch on as they arrive.
 - Completed processes show `[DONE]` in `accentBlue` (§2.5, structural/reference) in place of the percentage.
 - **Hovering a row** raises the process HUD (§5.10) and lifts the row to `bgPanelRaised`.
@@ -472,7 +485,7 @@ happened to P7?" otherwise has to reconstruct it from four panels.
   in the process's §2.3 hue, `bgVoid` ground, ASCII `-----` rules between
   blocks, no drop shadow. The border hue is how you confirm the HUD belongs to
   the row you are pointing at.
-- **Contents, in order:** identity glyph + `P<id>` + the live bracketed state
+- **Contents, in order:** `P<id>` + the live bracketed state
   badge; the `CLASS` label with **a plain-language sentence saying what that
   class means for this process** — a category word in a column is exactly the
   kind of thing a viewer cannot decode on its own; then `CPU DONE` (ticks run /
@@ -553,19 +566,21 @@ When the scheduler switches which process is running (a context switch):
 - Before any JSON is loaded: the main grid shows a centered placeholder panel — "No simulation loaded. Choose an algorithm and workload below, then press RUN." in `--text-dim`, with a faint animated scan-line effect across the panel background (a horizontal 2px `--border-default` line sweeping top-to-bottom on a 3s loop) as the one purely-decorative flourish in the whole spec — justified because it's the one moment the screen would otherwise be dead empty.
 - While the C++ binary is presumed running (if wired to the optional local-server stretch goal from PRD 7.7): a simple indeterminate progress bar in `--text-primary`, not a spinner — fits the horizontal/linear language of the rest of the UI (Gantt track, scrub bar) better than a circular spinner would.
 
-### 6.9 Liquid fill — the process ticker bars (new, 2026-08-24b)
+### 6.9 Liquid fill — the process ticker bars (new 2026-08-24b, segmented 2026-08-25)
 
 Added at explicit request: the progress bars should move "as if it's like a smooth liquid." This is the reason the ticker bars are a `FluidBar` rather than a character bar (§2.7(7), logged deviation) — a glyph bar advances in whole-cell steps, and at roughly one tick per cell that is a row of characters switching on and off, which is the opposite of flow.
 
-Three layers, and all three are needed — dropping any one leaves it reading as a rectangle being resized:
+**Revised 2026-08-25 (explicit user request):** the fill body is now tiny segmented blocks — a row of small cells (pitch ~6px + 2px gap, computed from the available width so wider bars get more, finer segments) — rather than one continuous rectangle. A segmented meter reads more like instrumentation, which is what was asked for. It stays liquid, not digital, because of what each layer does:
 
-1. **A long, eased width transition** (`durationFlow` = 900ms, `OutCubic`). The level *settles* into its new position rather than snapping. This is the layer that does most of the work, and it is why the token is a full 900ms in a system whose UI transitions top out at 300ms: a fill that keeps moving between ticks never has a still frame to look discrete in.
-2. **A brighter meniscus at the leading edge.** Visual weight sits where the motion is, which is what makes a moving edge read as a *surface* rather than as the end of a block.
-3. **A slow travelling sheen across the filled body**, running only while that process holds the CPU. Without it a bar that is not currently advancing reads as a solid block; with it, it reads as held liquid. It stops when the process stops, so the sheen is also a live "this one is running" signal.
+1. **Each segment eases its own width in independently** (`durationFlow` = 900ms, `InOutSine`). A segment's fill fraction is `clamp(overallFraction × segmentCount − index, 0, 1)` — fully lit segments before the boundary, a *partially*-filled segment straddling it, and unlit segments after. Because every segment eases on its own, segments visibly fill one after another rather than all snapping lit/unlit together — that per-segment lag is what keeps a wall of tiny blocks from reading as a discrete LED meter.
+2. **A brighter meniscus rides the true leading edge** — the actual filled length (`channelWidth × fraction`), not a segment boundary. Visual weight sits where the motion is, which is what makes the front read as a *surface* rather than as blocks stacking up.
+3. **A single travelling sheen sweeps across the entire filled span**, independent of the segment grid underneath, running only while that process holds the CPU. This is what keeps the segmented body reading as *one* liquid surface rather than a row of separate cells — without it, a paused bar would read as static blocks; with it, filled segments together still read as held liquid. It stops when the process stops, so the sheen also doubles as a live "this one is running" signal.
 
-The unfilled remainder of the channel is a dotted `·` rule, not blank space, so a bar at 0% still reads as a measured track. ASCII `[` `]` brackets are kept at both ends: the fill is continuous, but it still sits inside the terminal's grammar.
+The unfilled remainder of each segment is its own faint track tint, not blank space, so a bar at 0% still reads as a measured row of cells. ASCII `[` `]` brackets are kept at both ends: the fill is segmented, but it still sits inside the terminal's grammar.
 
-Everything else about the bar stays Terminal CLI — zero radius, flat color, no gradient on the body, no rounded cap.
+**No per-process glyph or symbol anywhere in this component** (§2.3 is hue-only as of 2026-08-25) — `fillColor` (the process's `Theme.procShade(pid)`) is the only thing that identifies which process a bar belongs to.
+
+Everything else about the bar stays Terminal CLI — zero radius, flat color, no gradient, no rounded cap.
 
 ### 6.10 CRT flicker (new, 2026-08-24b)
 
@@ -642,8 +657,7 @@ QtObject {
     readonly property color stateTerminated: "#1F521F"
     readonly property color stateNew:        "#12300F"
 
-    // Process identity — §2.3 (index with pid % 8; hue AND glyph, both used)
-    readonly property var procGlyphs: ["█", "▓", "▒", "░", "║", "≡", "·", "#"]
+    // Process identity — §2.3 (index with pid % 8; hue only as of 2026-08-25)
     readonly property var procShades: ["#33FF00", "#00E5FF", "#FF3EC9", "#FFB000",
                                        "#4D9FFF", "#FF7A29", "#C77DFF", "#D4FF3E"]
 

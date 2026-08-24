@@ -8,6 +8,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Add ent
 
 ## [Unreleased]
 
+### GUI polish pass — glyph removal, green-only frames, playhead speed fix (2026-08-25)
+
+Five fixes reported directly against the running build, after the pivot/redesign commit below. Point 1 reverses the 2026-08-24b decision to add a glyph channel — one day's use showed it as visual noise a viewer didn't ask for, not as a needed accessibility fallback.
+
+#### Changed
+- **Per-process identity is hue-only again** (`EDRD.md` §2.3) — the `█ ▓ ▒ ░ ║ ≡ · #` fill-glyph channel added 2026-08-24b is gone from every panel it touched: Gantt segments (no fill texture at all now, just a hue border and centered `P<id>` label on flat `bgVoid`), `ProcessTicker` (glyph column removed), `ReadyQueueTable` (glyph column removed, header spacer removed to match), `AgingIndicator` (glyph column removed), `ProcessHud` (glyph removed from header). `Theme.procGlyph`/`procGlyphs` deleted; `Theme.procShade` is the only per-process accessor left.
+- **`FluidBar`'s fill is now tiny segmented blocks**, not one continuous rectangle (`EDRD.md` §6.9) — a `Row` of small cells (~6px pitch + 2px gap, computed from available width), each easing its own width in independently so segments visibly fill in sequence. A single travelling sheen still sweeps the whole filled span across segment boundaries, and the meniscus still rides the true (unsegmented) filled edge, so it reads as one liquid surface rather than a row of separate cells.
+- **Every pane border is green, always** — `TerminalPane`'s `accentColor` override removed from `WhyPanel` (was cyan) and `AgingIndicator` (was amber). Role hues (`EDRD.md` §2.5) now govern only a pane's *content*, never its frame.
+- **`ProcessTicker`'s `P<id>` label keeps its process's hue in every state** (running, waiting, done) instead of dimming to `textSecondary` when not the running row — a viewer tracking one process's color needs it to stay put across the whole run.
+- **`WhyPanel`'s `"P<pid> RUNS NEXT"` verdict is colored by that process's own hue**, not a fixed `accentMagenta` — the same color the process wears in the Gantt chart and ticker, so a process reads as one consistent color across the whole dashboard.
+
+#### Fixed
+- **The Gantt playhead's move animation now scales its duration with the actual current playback speed**, not the fixed 1× base rate. `GanttChart.qml` gained a `ticksPerSecond` property (wired from `Dashboard`'s `root.ticksPerSecond = Theme.baseTicksPerSecond * speed`), and the `Behavior on x` duration is capped at a fraction of the *current* tick interval instead of the fixed one. Previously the duration was computed from `Theme.baseTicksPerSecond` alone regardless of speed, so at 2×/4× the animation no longer finished before the next tick retargeted it and the playhead visibly fell further and further behind instead of tracking playback — reported as "moves very slow and doesn't snap according to the speed."
+
+Verified: clean rebuild, all 40 engine runs pass, GUI launches with zero QML
+warnings — including a manual keyboard/mouse-driven pass reaching the Dashboard
+screen (`RR`/`Tiny Batch`), not just the picker screens the earlier automated
+launch checks reached.
+
 ### Doc sync & first commit of the pivot (2026-08-25)
 
 Everything below this entry — the architecture pivot, the Terminal CLI redesign,

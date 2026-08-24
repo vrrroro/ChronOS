@@ -14,7 +14,6 @@ TerminalPane {
     readonly property int barScale: 30
 
     title: "AGING"
-    accentColor: Theme.accentAmber
 
     ColumnLayout {
         anchors.fill: parent
@@ -51,16 +50,8 @@ TerminalPane {
                 readonly property bool warning: modelData.aboveThreshold
 
                 Text {
-                    text: Theme.procGlyph(entry.modelData.pid)
-                    color: Theme.procShade(entry.modelData.pid)
-                    font.family: Theme.fontMono
-                    font.pixelSize: Theme.sizeData
-                    Layout.preferredWidth: Theme.charWidth(Theme.sizeData)
-                }
-
-                Text {
                     text: "P" + entry.modelData.pid
-                    color: Theme.textSecondary
+                    color: Theme.procShade(entry.modelData.pid)
                     font.family: Theme.fontMono
                     font.pixelSize: Theme.sizeData
                     Layout.preferredWidth: Theme.charWidth(Theme.sizeData) * 4

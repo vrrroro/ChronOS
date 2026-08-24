@@ -52,22 +52,18 @@ TerminalPane {
                 anchors.fill: parent
                 spacing: Theme.spaceSm
 
-                Text {
-                    text: Theme.procGlyph(row.modelData.pid)
-                    color: row.hue
-                    font.family: Theme.fontMono
-                    font.pixelSize: Theme.sizeData
-                    Layout.preferredWidth: Theme.charWidth(Theme.sizeData)
-                }
-
+                // No glyph — the process's own hue is the only identity
+                // channel now (2026-08-25, explicit user request), and it
+                // stays that color in every state so a viewer can track "which
+                // one is P3" continuously rather than losing it whenever that
+                // row isn't the one currently running.
                 Text {
                     text: "P" + row.modelData.pid
-                    color: row.isRunning ? row.hue : Theme.textSecondary
+                    color: row.hue
                     font.family: Theme.fontMono
                     font.pixelSize: Theme.sizeData
                     font.weight: row.isRunning ? Theme.weightBold : Theme.weightMedium
                     Layout.preferredWidth: Theme.charWidth(Theme.sizeData) * 4
-                    Behavior on color { ColorAnimation { duration: Theme.durationBase } }
                 }
 
                 FluidBar {

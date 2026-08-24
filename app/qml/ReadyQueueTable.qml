@@ -23,12 +23,6 @@ TerminalPane {
             Layout.fillWidth: true
             spacing: Theme.spaceSm
 
-            Text {
-                text: " "
-                font.family: Theme.fontMono
-                font.pixelSize: Theme.sizeLabel
-                Layout.preferredWidth: root.cw
-            }
             HeaderCell { text: "PID"; cells: 4 }
             HeaderCell { text: "PRI"; cells: 4 }
             HeaderCell { text: "REM"; cells: 4 }
@@ -88,15 +82,6 @@ TerminalPane {
                 RowLayout {
                     anchors.fill: parent
                     spacing: Theme.spaceSm
-
-                    // Identity glyph (§2.3) — constant for the whole run.
-                    Text {
-                        text: Theme.procGlyph(rowItem.modelData.pid)
-                        color: Theme.procShade(rowItem.modelData.pid)
-                        font.family: Theme.fontMono
-                        font.pixelSize: Theme.sizeData
-                        Layout.preferredWidth: root.cw
-                    }
 
                     DataCell {
                         text: "P" + rowItem.modelData.pid

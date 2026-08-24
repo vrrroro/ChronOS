@@ -13,6 +13,11 @@ TerminalPane {
     id: root
     property int currentTick: 0
     property int maxTick: 1
+    // The actual current playback rate, not the fixed 1x base rate — the
+    // playhead's own move animation must scale with this or it falls further
+    // and further behind the real tick as speed goes up (see the Behavior
+    // below).
+    property real ticksPerSecond: Theme.baseTicksPerSecond
 
     title: "CPU TIMELINE"
     active: true
@@ -110,27 +115,9 @@ TerminalPane {
 
                         Behavior on border.color { ColorAnimation { duration: Theme.durationBase } }
 
-                        // Glyph fill — the second identity channel (§2.3), and
-                        // what keeps the chart readable without color.
-                        Text {
-                            anchors.fill: parent
-                            anchors.margins: Theme.borderThin
-                            text: Theme.procGlyph(seg.modelData.pid)
-                                  .repeat(Math.max(1, Math.ceil(seg.width / Theme.charWidth(Theme.sizeData))))
-                            color: seg.hue
-                            font.family: Theme.fontMono
-                            font.pixelSize: Theme.sizeData
-                            opacity: seg.isCurrent ? 0.55 : 0.22
-                            clip: true
-                            verticalAlignment: Text.AlignVCenter
-                            Behavior on opacity { NumberAnimation { duration: Theme.durationBase } }
-                        }
-
-                        // PID label. Centered in the segment and drawn in the
-                        // process's own color — previously it sat on a filled
-                        // swatch in textOnAccent, which read as a separate
-                        // object stuck onto the bar rather than as the bar's
-                        // own label.
+                        // PID label only — no glyph fill (2026-08-25, explicit
+                        // user request). Identity is carried by color alone:
+                        // the process's hue, centered in its own segment.
                         Text {
                             anchors.centerIn: parent
                             visible: seg.width >= implicitWidth + Theme.spaceXs * 2
@@ -141,16 +128,6 @@ TerminalPane {
                             font.weight: Theme.weightBold
                             opacity: seg.isCurrent || seg.isPast ? 1.0 : 0.5
                             Behavior on opacity { NumberAnimation { duration: Theme.durationBase } }
-
-                            // The glyph fill runs under the label, so it needs
-                            // its own ground to stay legible (§2.6).
-                            Rectangle {
-                                anchors.centerIn: parent
-                                width: parent.implicitWidth + Theme.spaceSm
-                                height: parent.implicitHeight + 2
-                                color: Theme.bgVoid
-                                z: -1
-                            }
                         }
                     }
                 }
@@ -164,11 +141,18 @@ TerminalPane {
                 height: canvas.height
                 color: Theme.borderActive
 
-                // Eased over a full tick rather than snapping: at the slower
-                // default rate (§6) a hard jump every step reads as stuttering.
+                // Eased toward each new tick rather than snapping instantly —
+                // at the slower default rate (§6) a hard jump every step reads
+                // as stuttering. But the ease must always finish comfortably
+                // before the *next* tick arrives, or it never catches up: at
+                // higher playback speeds the tick interval itself shrinks, so
+                // the animation duration is capped at a fraction of the
+                // current interval (1000 / root.ticksPerSecond), not the
+                // fixed 1x base rate. This is what makes it visibly snap
+                // faster as speed increases instead of lagging behind it.
                 Behavior on x {
                     NumberAnimation {
-                        duration: Math.min(Theme.durationFlow, 1000 / Theme.baseTicksPerSecond)
+                        duration: Math.min(Theme.durationFlow, 700 / root.ticksPerSecond)
                         easing.type: Easing.InOutSine
                     }
                 }

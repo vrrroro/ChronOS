@@ -39,7 +39,6 @@ TerminalPane {
 
     title: "WHY THIS PROCESS"
     active: d.hasDecision
-    accentColor: Theme.accentCyan
     statusText: d.hasDecision
                 ? "DECISION SCORE " + Number(d.score).toFixed(1)
                 : "AWAITING FIRST DECISION"
@@ -65,12 +64,17 @@ TerminalPane {
 
         // Verdict — the fourth and last permitted use of Instrument Serif (§3.1).
         // Keyed on the pid so it re-types once per *decision*, never per tick.
+        // Colored by the chosen process's own hue (Theme.procShade), the same
+        // color that identifies it everywhere else (Gantt, ticker, ready
+        // queue) — not a fixed accent — so "which process" reads as one
+        // consistent color across the whole dashboard, not a separate WhyPanel-
+        // only color.
         TypewriterText {
             visible: root.d.hasDecision
             Layout.fillWidth: true
             Layout.preferredHeight: root.d.hasDecision ? Theme.sizeH0 + Theme.spaceXs : 0
             fullText: root.d.hasDecision ? "P" + root.d.pid + " RUNS NEXT" : ""
-            color: Theme.accentMagenta
+            color: Theme.procShade(root.d.pid)
             font.family: Theme.fontDisplay
             font.pixelSize: Theme.sizeH0
             bloomEnabled: true

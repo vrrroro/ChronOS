@@ -41,12 +41,6 @@ Rectangle {
             spacing: Theme.spaceXs
 
             Text {
-                text: Theme.procGlyph(root.entry.pid !== undefined ? root.entry.pid : 0)
-                color: root.hue
-                font.family: Theme.fontMono
-                font.pixelSize: Theme.sizeLabel
-            }
-            Text {
                 text: "P" + (root.entry.pid !== undefined ? root.entry.pid : "?")
                 color: root.hue
                 font.family: Theme.fontMono

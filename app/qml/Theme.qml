@@ -53,22 +53,19 @@ QtObject {
     readonly property color stateNew: "#12300F"
 
     // --- Per-process identity (EDRD §2.3) --------------------------------
-    // Two channels, indexed pid % 8: a neon hue *and* an ASCII fill glyph.
-    //
-    // The hue does the work at a glance. The glyph is what keeps the encoding
-    // honest — it survives greyscale, a washed-out projector, and deuteranopia,
-    // which is exactly what a hue-only palette cannot promise. Keeping both is
-    // why this can be colorful without becoming unreadable.
+    // Revised 2026-08-25 (explicit user request): a single channel, indexed
+    // pid % 8 — a neon hue, and nothing else. This app previously also carried
+    // an ASCII fill glyph (█ ▓ ▒ ░ ║ ≡ · #) per process as a second, redundant
+    // identity channel; it's gone. Every process now shows the exact same
+    // shape everywhere (a plain "P<pid>" label, a solid/segmented fill) and
+    // color alone tells them apart.
     //
     // Green leads the palette because it is the app's own color, and the
     // remaining seven are spaced around the wheel so adjacent PIDs never sit
     // adjacent in hue.
-    readonly property var procGlyphs: ["█", "▓", "▒", "░",
-                                       "║", "≡", "·", "#"]
     readonly property var procShades: ["#33FF00", "#00E5FF", "#FF3EC9", "#FFB000",
                                        "#4D9FFF", "#FF7A29", "#C77DFF", "#D4FF3E"]
 
-    function procGlyph(pid) { return procGlyphs[((pid % 8) + 8) % 8]; }
     function procShade(pid) { return procShades[((pid % 8) + 8) % 8]; }
 
     // --- Type (EDRD §3.1/§3.2) -------------------------------------------
