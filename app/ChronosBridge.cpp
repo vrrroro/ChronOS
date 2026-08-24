@@ -384,46 +384,56 @@ QVariantList ChronosBridge::agingListAt(int tick) const {
     return out;
 }
 
+QVariantMap ChronosBridge::buildTickerRow(int tick, const ProcessStat& p) const {
+    auto it = m_meta.find(p.pid);
+    if (it == m_meta.end()) return QVariantMap();
+    const ProcessMeta& meta = it->second;
+
+    const int ranSoFar = std::min(meta.burstTime, ticksRunUpTo(p.pid, tick));
+    const bool done = tick >= meta.completionTime;
+    const double pct = meta.burstTime > 0 ? (100.0 * ranSoFar / meta.burstTime) : 100.0;
+
+    QVariantMap m2;
+    m2["pid"] = p.pid;
+    m2["slot"] = processSlot(p.pid);
+    m2["color"] = processColor(p.pid);
+    m2["progressPct"] = pct;
+    m2["done"] = done;
+    m2["arrived"] = tick >= meta.arrivalTime;
+    // Everything below feeds the hover HUD (EDRD §5.10). Computed here
+    // rather than in QML so the panel stays a view over derived data.
+    m2["running"] = runningSegmentAt(tick) && runningSegmentAt(tick)->pid == p.pid;
+    m2["ranSoFar"] = ranSoFar;
+    m2["burstTime"] = meta.burstTime;
+    m2["remaining"] = std::max(0, meta.burstTime - ranSoFar);
+    m2["arrivalTime"] = meta.arrivalTime;
+    m2["completionTime"] = meta.completionTime;
+    m2["waitingTime"] = meta.waitingTimeFinal;
+    m2["turnaroundTime"] = meta.turnaroundTime;
+    m2["responseTime"] = meta.responseTime;
+    m2["contextSwitches"] = meta.contextSwitches;
+    // UNKNOWN means "never ran", which is only ever true before the first
+    // dispatch. PENDING says that in a word a viewer can act on.
+    m2["cls"] = meta.predictedClass == QStringLiteral("UNKNOWN")
+                    ? QStringLiteral("PENDING") : meta.predictedClass;
+    m2["state"] = done ? QStringLiteral("DONE")
+                       : (tick < meta.arrivalTime ? QStringLiteral("NOT ARRIVED")
+                                                  : (m2["running"].toBool()
+                                                         ? QStringLiteral("RUNNING")
+                                                         : QStringLiteral("READY")));
+    return m2;
+}
+
 QVariantList ChronosBridge::processTickerAt(int tick) const {
     QVariantList out;
     for (const auto& p : m_result.processStats) {
-        auto it = m_meta.find(p.pid);
-        if (it == m_meta.end()) continue;
-        const ProcessMeta& meta = it->second;
-
-        const int ranSoFar = std::min(meta.burstTime, ticksRunUpTo(p.pid, tick));
-        const bool done = tick >= meta.completionTime;
-        const double pct = meta.burstTime > 0 ? (100.0 * ranSoFar / meta.burstTime) : 100.0;
-
-        QVariantMap m2;
-        m2["pid"] = p.pid;
-        m2["slot"] = processSlot(p.pid);
-        m2["color"] = processColor(p.pid);
-        m2["progressPct"] = pct;
-        m2["done"] = done;
-        m2["arrived"] = tick >= meta.arrivalTime;
-        // Everything below feeds the hover HUD (EDRD §5.10). Computed here
-        // rather than in QML so the panel stays a view over derived data.
-        m2["running"] = runningSegmentAt(tick) && runningSegmentAt(tick)->pid == p.pid;
-        m2["ranSoFar"] = ranSoFar;
-        m2["burstTime"] = meta.burstTime;
-        m2["remaining"] = std::max(0, meta.burstTime - ranSoFar);
-        m2["arrivalTime"] = meta.arrivalTime;
-        m2["completionTime"] = meta.completionTime;
-        m2["waitingTime"] = meta.waitingTimeFinal;
-        m2["turnaroundTime"] = meta.turnaroundTime;
-        m2["responseTime"] = meta.responseTime;
-        m2["contextSwitches"] = meta.contextSwitches;
-        // UNKNOWN means "never ran", which is only ever true before the first
-        // dispatch. PENDING says that in a word a viewer can act on.
-        m2["cls"] = meta.predictedClass == QStringLiteral("UNKNOWN")
-                        ? QStringLiteral("PENDING") : meta.predictedClass;
-        m2["state"] = done ? QStringLiteral("DONE")
-                           : (tick < meta.arrivalTime ? QStringLiteral("NOT ARRIVED")
-                                                      : (m2["running"].toBool()
-                                                             ? QStringLiteral("RUNNING")
-                                                             : QStringLiteral("READY")));
-        out.push_back(m2);
+        QVariantMap row = buildTickerRow(tick, p);
+        if (!row.isEmpty()) out.push_back(row);
     }
     return out;
+}
+
+QVariantMap ChronosBridge::processTickerRowAt(int tick, int index) const {
+    if (index < 0 || index >= static_cast<int>(m_result.processStats.size())) return QVariantMap();
+    return buildTickerRow(tick, m_result.processStats[static_cast<size_t>(index)]);
 }

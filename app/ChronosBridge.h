@@ -61,6 +61,16 @@ public:
     Q_INVOKABLE QVariantMap whyPanelAt(int tick) const;
     Q_INVOKABLE QVariantList agingListAt(int tick) const;
     Q_INVOKABLE QVariantList processTickerAt(int tick) const;
+    // Same per-process row as processTickerAt(), but for one process at a
+    // fixed vector index into m_result.processStats. Exists so ProcessTicker's
+    // ListView can bind its model to the stable process *count* (Q_PROPERTY
+    // processCount, unchanging for the run) and have each delegate pull its
+    // own row by index, instead of rebinding model to a fresh QVariantList
+    // every tick — the latter has no stable identity for QML to diff against,
+    // so ListView tears down and recreates every delegate every tick, which
+    // kills every Behavior animation running on them (the process-progress
+    // bars visibly snapping/"glitching" instead of easing).
+    Q_INVOKABLE QVariantMap processTickerRowAt(int tick, int index) const;
     Q_INVOKABLE int cpuUtilizationAt(int tick) const;
     Q_INVOKABLE int contextSwitchesAt(int tick) const;
     Q_INVOKABLE QString processColor(int pid) const;
@@ -86,6 +96,7 @@ private:
 
     int ticksRunUpTo(int pid, int tick) const;
     const DecisionLog* lastDecisionAt(int tick) const;
+    QVariantMap buildTickerRow(int tick, const ProcessStat& p) const;
     const GanttEntry* runningSegmentAt(int tick) const;
     void rebuildMeta();
 

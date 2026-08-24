@@ -27,11 +27,22 @@ TerminalPane {
         anchors.fill: parent
         clip: true
         spacing: Theme.spaceXs
-        model: bridge.processTickerAt(root.currentTick)
+        // Bound to the process *count* (Q_PROPERTY, stable for the whole run)
+        // rather than to bridge.processTickerAt(currentTick) directly. That
+        // call returns a brand-new QVariantList every tick, which QML can't
+        // diff against the previous one — ListView would tear down and
+        // recreate every delegate every tick, which meant every Behavior
+        // animation on them (the FluidBar segments especially) never actually
+        // ran: each freshly-created item just snaps straight to its target
+        // value instead of easing into it, which is what "glitching" was.
+        // Binding to the stable count keeps delegates alive across ticks;
+        // each one pulls its own row's live data by index below.
+        model: bridge.processCount
 
         delegate: Rectangle {
             id: row
-            required property var modelData
+            required property int index
+            readonly property var modelData: bridge.processTickerRowAt(root.currentTick, index)
             width: ListView.view.width
             height: Theme.sizeData + Theme.spaceXs
 

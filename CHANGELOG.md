@@ -8,6 +8,47 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Add ent
 
 ## [Unreleased]
 
+### Process ticker: fix delegate churn killing the segment fill animation (2026-08-25)
+
+Reported directly against the previous entry's segmented `FluidBar` work: "the
+progress bar glitches outwards instead of moving fluidly... every other
+progress bar seems to be glitching out as well." Root cause wasn't the segment
+math — it was that `ProcessTicker.qml`'s `ListView` bound its `model` straight
+to `bridge.processTickerAt(root.currentTick)`, a `Q_INVOKABLE` that returns a
+**brand-new `QVariantList` object every call**. QML has no way to diff that
+against the previous tick's list, so on every single tick `ListView` tore down
+and recreated *every* delegate — every `FluidBar`, every segment inside it —
+from scratch. A freshly created item's first property binding evaluation does
+not run any `Behavior`; it just snaps straight to the target value. So instead
+of segments easing in one after another, the entire row was being destroyed
+and instantly redrawn at its new state every tick, which is exactly what
+"glitching outward" looks like, and it hit every row because the whole
+`ListView`'s model was being replaced each time, not just one process's.
+
+#### Fixed
+- `ChronosBridge` gained `processTickerRowAt(int tick, int index)`, returning
+  one process's row by its fixed position in `m_result.processStats` (stable
+  for the whole run). The shared per-row computation was extracted into a new
+  private `buildTickerRow()` helper, used by both this and the existing
+  `processTickerAt()` (kept, now just loops the helper — unchanged behavior).
+- `ProcessTicker.qml`'s `ListView.model` now binds to `bridge.processCount`
+  (an existing `Q_PROPERTY`, unchanging once a run starts) instead of the
+  per-tick list call. Each delegate keeps a `required property int index` and
+  pulls its own live row via `bridge.processTickerRowAt(root.currentTick,
+  index)` — since the *model* no longer changes tick to tick, `ListView` keeps
+  the same delegate instances alive across the whole run, so every `Behavior`
+  (the segment width eases, the meniscus, the sheen) now actually gets to run
+  between the old and new value instead of being torn down before it can.
+
+Verified: clean rebuild, all 40 engine runs pass, GUI launches with zero QML
+warnings on repeated checks. Could not get a clean automated before/after
+screenshot comparison of the animation itself in this sandboxed environment —
+one capture attempt landed on an unrelated window instead of the app, which is
+the same screenshot-tooling unreliability already logged in
+`PROJECT_STATUS.md` §9, not an app issue. The fix addresses a textbook QML
+delegate-churn cause with a standard fix (stable model identity, per-row
+lookup by index); recommend the user confirm live.
+
 ### GUI polish pass — glyph removal, green-only frames, playhead speed fix (2026-08-25)
 
 Five fixes reported directly against the running build, after the pivot/redesign commit below. Point 1 reverses the 2026-08-24b decision to add a glyph channel — one day's use showed it as visual noise a viewer didn't ask for, not as a needed accessibility fallback.
