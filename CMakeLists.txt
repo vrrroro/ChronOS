@@ -30,6 +30,15 @@ set_target_properties(chronos PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/engine"
 )
 
+# The CLI is run from plain shells (README, analysis/run_all.py, tests/), where
+# PATH often finds an older libstdc++-6.dll first — Git for Windows ships one —
+# and the exe then dies at load with STATUS_ENTRYPOINT_NOT_FOUND (0xC0000139).
+# Linking the MinGW runtime statically makes chronos.exe self-contained. The
+# GUI is unaffected: it needs ucrt64/bin on PATH for Qt anyway.
+if(MINGW)
+    target_link_options(chronos PRIVATE -static)
+endif()
+
 # --- chronos_app: native Qt/QML GUI ---------------------------------------
 find_package(Qt6 COMPONENTS Core Gui Qml Quick QUIET)
 

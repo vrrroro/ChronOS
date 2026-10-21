@@ -9,6 +9,9 @@
 
 #include <algorithm>
 #include <limits>
+#include <stdexcept>
+
+#include "workload_io.h"
 
 #ifndef CHRONOS_WORKLOADS_DIR
 #define CHRONOS_WORKLOADS_DIR "workloads"
@@ -64,51 +67,95 @@ void WorkloadListModel::refresh() {
         e.description = obj.value(QStringLiteral("description")).toString();
         e.quantum = obj.value(QStringLiteral("quantum")).toInt(0);
 
-        const QJsonArray procs = obj.value(QStringLiteral("processes")).toArray();
-        e.processCount = procs.size();
-
-        int minBurst = std::numeric_limits<int>::max();
-        int maxBurst = 0;
-        int minPriority = std::numeric_limits<int>::max();
-        int maxPriority = 0;
-        int lastArrival = 0;
-
-        for (const QJsonValue& v : procs) {
+        QVector<ProcSpec> specs;
+        for (const QJsonValue& v : obj.value(QStringLiteral("processes")).toArray()) {
             const QJsonObject p = v.toObject();
-            const int burst = p.value(QStringLiteral("burstTime")).toInt(0);
-            const int arrival = p.value(QStringLiteral("arrivalTime")).toInt(0);
-            const int priority = p.value(QStringLiteral("priority")).toInt(5);
-
-            e.totalBurst += burst;
-            minBurst = std::min(minBurst, burst);
-            maxBurst = std::max(maxBurst, burst);
-            minPriority = std::min(minPriority, priority);
-            maxPriority = std::max(maxPriority, priority);
-            lastArrival = std::max(lastArrival, arrival);
+            specs.push_back(ProcSpec{p.value(QStringLiteral("arrivalTime")).toInt(0),
+                                     p.value(QStringLiteral("burstTime")).toInt(0),
+                                     p.value(QStringLiteral("priority")).toInt(5)});
         }
+        computeStats(e, specs);
 
-        if (e.processCount > 0) {
-            e.minBurst = minBurst;
-            e.maxBurst = maxBurst;
-            e.priorityMin = minPriority;
-            e.priorityMax = maxPriority;
-            e.arrivalSpan = lastArrival;
-            e.avgBurst = static_cast<double>(e.totalBurst) / e.processCount;
-            // Work arriving per tick of arrival window. Above 1.0 the CPU can
-            // never catch up while arrivals are still coming in, which is the
-            // single most useful number for predicting whether a preset will
-            // show queueing at all — so it is worth surfacing even though it
-            // takes a sentence to explain.
-            e.loadFactor = e.arrivalSpan > 0
-                               ? static_cast<double>(e.totalBurst) / e.arrivalSpan
-                               : static_cast<double>(e.totalBurst);
-            e.profile = profileFor(e.avgBurst);
+        // Resolved through the engine's own loader, so the note reflects any
+        // "mlfq"/"cfs" override blocks in the file exactly as a run would.
+        try {
+            e.schedulerNote = schedulerNote(loadWorkload(e.path.toStdString()));
+        } catch (const std::exception& ex) {
+            e.schedulerNote = QStringLiteral("invalid: %1").arg(QString::fromUtf8(ex.what()));
         }
 
         m_entries.push_back(e);
     }
 
     endResetModel();
+}
+
+void WorkloadListModel::computeStats(Entry& e, const QVector<ProcSpec>& procs) {
+    e.processCount = procs.size();
+    e.totalBurst = 0;
+
+    int minBurst = std::numeric_limits<int>::max();
+    int maxBurst = 0;
+    int minPriority = std::numeric_limits<int>::max();
+    int maxPriority = 0;
+    int lastArrival = 0;
+
+    for (const ProcSpec& p : procs) {
+        e.totalBurst += p.burst;
+        minBurst = std::min(minBurst, p.burst);
+        maxBurst = std::max(maxBurst, p.burst);
+        minPriority = std::min(minPriority, p.priority);
+        maxPriority = std::max(maxPriority, p.priority);
+        lastArrival = std::max(lastArrival, p.arrival);
+    }
+
+    if (e.processCount > 0) {
+        e.minBurst = minBurst;
+        e.maxBurst = maxBurst;
+        e.priorityMin = minPriority;
+        e.priorityMax = maxPriority;
+        e.arrivalSpan = lastArrival;
+        e.avgBurst = static_cast<double>(e.totalBurst) / e.processCount;
+        // Work arriving per tick of arrival window. Above 1.0 the CPU can
+        // never catch up while arrivals are still coming in, which is the
+        // single most useful number for predicting whether a preset will
+        // show queueing at all — so it is worth surfacing even though it
+        // takes a sentence to explain.
+        e.loadFactor = e.arrivalSpan > 0
+                           ? static_cast<double>(e.totalBurst) / e.arrivalSpan
+                           : static_cast<double>(e.totalBurst);
+        e.profile = profileFor(e.avgBurst);
+    }
+}
+
+QString WorkloadListModel::schedulerNote(const Workload& w) {
+    const MlfqParams m = resolveMlfq(w.mlfq, w.quantum);
+    const CfsParams c = resolveCfs(w.cfs, w.quantum);
+    QStringList quanta;
+    for (int q : m.quanta) quanta << QString::number(q);
+    return QStringLiteral("MLFQ %1 boost %2 · CFS slice ≥%3")
+        .arg(quanta.join(QLatin1Char('/')))
+        .arg(m.boostInterval)
+        .arg(c.minGranularity);
+}
+
+QVariantMap WorkloadListModel::summarize(const QVector<ProcSpec>& procs, int quantum) {
+    Entry e;
+    e.quantum = quantum;
+    computeStats(e, procs);
+    return {
+        {QStringLiteral("processCount"), e.processCount},
+        {QStringLiteral("profile"), e.profile},
+        {QStringLiteral("quantum"), e.quantum},
+        {QStringLiteral("totalBurst"), e.totalBurst},
+        {QStringLiteral("avgBurst"), oneDecimal(e.avgBurst)},
+        {QStringLiteral("minBurst"), e.minBurst},
+        {QStringLiteral("maxBurst"), e.maxBurst},
+        {QStringLiteral("arrivalSpan"), e.arrivalSpan},
+        {QStringLiteral("priorityMin"), e.priorityMin},
+        {QStringLiteral("priorityMax"), e.priorityMax},
+        {QStringLiteral("loadFactor"), oneDecimal(e.loadFactor)},
+    };
 }
 
 int WorkloadListModel::rowCount(const QModelIndex& parent) const {
@@ -134,6 +181,7 @@ QVariant WorkloadListModel::data(const QModelIndex& index, int role) const {
         case PriorityMinRole: return e.priorityMin;
         case PriorityMaxRole: return e.priorityMax;
         case LoadFactorRole: return oneDecimal(e.loadFactor);
+        case SchedulerNoteRole: return e.schedulerNote;
         default: return {};
     }
 }
@@ -154,5 +202,6 @@ QHash<int, QByteArray> WorkloadListModel::roleNames() const {
         {PriorityMinRole, "priorityMin"},
         {PriorityMaxRole, "priorityMax"},
         {LoadFactorRole, "loadFactor"},
+        {SchedulerNoteRole, "schedulerNote"},
     };
 }

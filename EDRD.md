@@ -9,7 +9,7 @@ Scope: This document covers **only** the dashboard's visual design and interacti
 
 > ✎ **EDIT ME:** Same convention as the PRD — every concrete value here (hex codes, pixel sizes, durations) is a real, implementable starting point, not a law. Change anything that looks wrong once you see it rendered.
 
-> **Logged deviation — native app pivot (2026-08-23, explicit user request):** the dashboard is no longer a web page. It is a native Qt 6 / QML desktop app (`app/qml/`, see `ARCHITECTURE.md` §5 and `CLAUDE.md`); `dashboard/` has been deleted. Throughout this document, read "CSS" as "QML," "DOM element" as "QML Item," and "page" as "window" — the *intent* of every component spec is unchanged. Three structural changes ship with the pivot and are documented in place: the picker is now a **full-screen two-step flow**, not a footer zone (§5.7); a **process progress ticker** panel has been added (§5.8); tokens live in a **QML singleton**, not CSS custom properties (§8.1); and the intro is an **auto-playing reveal**, not a scroll-driven one (§9).
+> **Logged deviation — native app pivot (2026-08-23, explicit user request):** the dashboard is no longer a web page. It is a native Qt 6 / QML desktop app (`app/qml/`, see `ARCHITECTURE.md` §5 and `AGENTS.md`); `dashboard/` has been deleted. Throughout this document, read "CSS" as "QML," "DOM element" as "QML Item," and "page" as "window" — the *intent* of every component spec is unchanged. Three structural changes ship with the pivot and are documented in place: the picker is now a **full-screen two-step flow**, not a footer zone (§5.7); a **process progress ticker** panel has been added (§5.8); tokens live in a **QML singleton**, not CSS custom properties (§8.1); and the intro is an **auto-playing reveal**, not a scroll-driven one (§9).
 
 > **Logged deviation — Terminal CLI design system (2026-08-24, explicit user request):** the app adopts a single named visual system, **Terminal CLI**: jet black, phosphor green, zero radius, 1px ASCII-framed panes, faint CRT scanlines, a blinking block cursor, shell metaphors (`>`, `$`, `~`, `[OK]`, `--flags`), and raw `[||||||…]` character bars in place of smooth chart chrome. §1 (intent), §2.1 (palette), §2.3 (process identity), §2.4a (glow), §2.7 (new — surface language) and §3 (typography) are rewritten for it. Three consequences worth stating outright:
 >
@@ -37,6 +37,13 @@ Scope: This document covers **only** the dashboard's visual design and interacti
 > 3. **Every pane border is green, always** (§2.4) — `WhyPanel`'s cyan and `AgingIndicator`'s amber accent borders are gone; role hues now govern only pane *content*, never the frame.
 > 4. **The why-panel's chosen-process verdict is colored by that process's own hue**, not a fixed magenta (§2.3) — the same color it wears in the Gantt chart and ticker, so a process can be tracked by color across every panel.
 > 5. **The Gantt playhead's move animation now scales its duration with the current playback speed** (§5.2), not the fixed 1× rate — at higher speed multipliers it previously fell further and further behind the actual tick instead of tracking it.
+
+> **Logged addition — OS schedulers and the compare screen (2026-10-22, explicit user request):** no change to §2 or §3 — every new surface is built from the existing tokens and primitives.
+>
+> 1. **Two more algorithms, in their own picker section** (§5.7): "MLFQ (Windows)" and "CFS (Linux)" sit under a `+--- REAL-WORLD OS SCHEDULERS` rule, below the original five.
+> 2. **A compare screen** (§5.11): `[ COMPARE TWO ]` on the algorithm picker selects an A and a B; they run on the same processes and play side by side on one clock, with a scoreboard and verdict revealed at the end.
+> 3. **Panels that depend on the algorithm now say so** — the ready queue's score column (§5.3), the aging panel (§5.5), the why-panel's status line and reasons (§5.4) — instead of applying AARS's vocabulary to everything.
+> 4. **Fixes found along the way:** Gantt tick labels that did not fit their segment ran into each other (`15178`) and are now omitted (§5.2); the process HUD showed a stale snapshot under a stationary pointer and now follows playback (§5.10); idle ticks read as a process called "P-1"; the TickBar flash used `#FFFFFF`, outside §2.1's closed table, and now uses a tint of the process hue (§6.9).
 
 ---
 
@@ -165,7 +172,7 @@ Hard rules:
 - **No border-halo glow on containers.** Panes are 1px lines. A pane signals "active" by switching `borderMuted` → `borderActive`, not by growing an aura.
 - Any bloom must show **no visible edge or banding**. If you can see where the blur stops, it is wrong.
 - **Bloom is faint by default.** If the halo is the first thing you notice about a piece of text, it is too strong. The splash wordmark (§9) is the one place it runs hot, and even there it runs hot by having a wider blur radius, not a higher opacity.
-- The continuous animations in the app are the **cursor blink** (§2.7), the **CRT flicker on display type** (§6.10), the **splash bloom pulse** (§9) and the **liquid fill on the running process's bar** (§6.9). Operational dashboard controls never pulse.
+- The continuous animations in the app are the **cursor blink** (§2.7), the **CRT flicker on display type** (§6.10), the **splash bloom pulse** (§9) and the **segment-by-segment tick on the ticker bars** (§6.9 — replaced the liquid fill 2026-10-16; it moves only when a tick lands, then rests). Operational dashboard controls never pulse.
 
 ### 2.5 Semantic accent colors (rewritten 2026-08-24b — each hue owns one role)
 
@@ -375,6 +382,7 @@ So each segment now carries **its own start tick, directly above its own left ed
 A boundary label brightens to its process's hue once the playhead has reached it, so the axis fills in as the run proceeds and a viewer can read the elapsed schedule off the chart directly: `0` … P1 … `3` … P2 … `9`.
 
 - **Playhead:** a vertical line in `borderActive` spanning the full track height at `currentTick`. The single most important visual anchor in the dashboard — always crisp, always findable. Motion spec in §6.1.
+- **Label collisions (fixed 2026-10-22):** a start label is drawn only if it fits inside its own segment, and the final end label only if both fit — so two numbers can never run together. The hairline still marks every boundary, labelled or not.
 - Idle/gap ticks (CPU running nothing) are simply absent from the segment list, leaving the `bgInset` track visible — an explicit gap in a filled row reads as idle without needing a hatch pattern.
 
 ### 5.3 Ready queue table
@@ -385,6 +393,7 @@ A boundary label brightens to its process's hue once the playhead has reached it
 - `CLASS` column renders as a small pill badge (not plain text) — background `--bg-panel-raised`, text in the relevant tone (e.g. CPU-bound in a cooler/dimmer tone, interactive in a brighter one) — exact wording "CPU-BOUND" / "IO-BOUND" / "INTERACTIVE" / "UNKNOWN".
 - Row for the currently-RUNNING process (if it briefly appears here during a transition) gets the full `--state-running` treatment (glow border) rather than the normal row style.
 - Sort order (score/priority descending) is enforced by the data, not user-sortable in the MVP — keep the table simple and let the score itself be the story.
+- **Per algorithm (revised 2026-10-22):** rows come in the running algorithm's *own* pick order, so the top row is who it would run next (previously non-AARS runs were sorted by base priority, which is FCFS's/SJF's/RR's order only by coincidence). The fifth column is that algorithm's decision quantity — `SCORE` (AARS), `QUEUE` as `Q0`/`Q1`… (MLFQ), `VRUN` (CFS) — and is absent for FCFS/SJF/RR/Priority. Under CFS the `PRI` column becomes `NICE`, since that is what CFS weighs. Processes that arrived after the last decision are listed below the scored rows with `—` in the score column, instead of being missing until the next decision.
 
 ### 5.4 "Why this process?" panel
 
@@ -402,6 +411,7 @@ The highest-value panel per the PRD — gets the most generous spacing and the c
 ### 5.5 Waiting/aging indicator
 
 - Compact list, one line per process currently accumulating a notable aging bonus: `P6   21 ticks waiting   →   +7 aging`.
+- **Algorithm-aware (revised 2026-10-22):** the status strip states the running algorithm's own rule — AARS's (possibly tuned) `BONUS = MIN(WAIT ÷ d, cap)`, Priority's `+1 PRIORITY PER 5 TICKS WAITED`, MLFQ's `BOOST TO Q0 EVERY n · NEXT @ t`. FCFS, SJF, RR and CFS have no aging term: the pane is titled `WAITING`, shows waits only (`29t`), and flags `[WARN]` past 30 ticks, since nothing will rescue those processes. Previously AARS's default formula was applied to every algorithm.
 - Uses `--state-waiting` amber for the process label if it's in true I/O WAITING state, or `--text-secondary` green-family if it's READY-but-aging (waiting for CPU, not I/O) — these are different situations and should look different.
 - A process that crosses a "getting close to starvation" threshold (configurable, e.g. aging bonus ≥ 8) gets a `--accent-warning` amber left-border flash (see 6.6) the moment it crosses — a deliberate, noticeable one-time cue, not a persistent alarm state.
 
@@ -420,8 +430,17 @@ The pickers are no longer a footer control strip inside the dashboard. In the na
 
 - **Step 1 — algorithm.** A screen-level heading (`h0`, Instrument Serif, typewriter reveal per §2.7) reading `CHOOSE AN ALGORITHM`, above one full-width row per algorithm. Each row is a 1px-framed pane; hover inverts it (§2.4a), click commits and advances.
 - **Step 2 — workload.** Same heading treatment, `CHOOSE A WORKLOAD`, above an **in-app list of workload files** — a `ListView` over `WorkloadListModel`, styled exactly like the ready-queue rows (§5.3): left stripe in the selection color, name plus process count, `bgPanelRaised` on the current item. A `[ RUN ]` button sits below, disabled (`textDim`, dashed border) until a workload is selected.
-- **Never an OS file dialog.** The workload list is a native in-app browser by deliberate choice. A `QFileDialog`/native file-explorer sheet anywhere in this flow breaks both the aesthetic and the "runs inside an OS, not on top of one" framing of §1.1. This is a hard constraint, restated in `CLAUDE.md`.
+- **Never an OS file dialog.** The workload list is a native in-app browser by deliberate choice. A `QFileDialog`/native file-explorer sheet anywhere in this flow breaks both the aesthetic and the "runs inside an OS, not on top of one" framing of §1.1. This is a hard constraint, restated in `AGENTS.md`.
 - **Why full-screen rather than a footer.** The original footer-zone design assumed a web page where the dashboard was always present. In the native app the simulation must be chosen *before* there is anything to show, so the picker gets the whole window; and giving it the whole window means the demo opens on something composed rather than on an empty dashboard waiting for input.
+- **Added 2026-10-16 (explicit user request):**
+  - **ABOUT card.** The algorithm step is now list-plus-card, like the workload step: compact rows on the left, an `AlgorithmCard` on the right describing the hovered row — a tagline, CHARACTERISTICS (how it picks, whether it preempts, its quantum, whether it needs burst lengths, starvation risk), and STRENGTHS / WEAKNESSES as `+` / `−` lines in the §2.5 positive/negative delta hues. Editorial prose only, no numbers (AGENTS.md: no illustrative metrics).
+  - **AARS tuner step.** AARS's row carries `[ TUNE ]` (or press `T`) into a **tuner** screen (`AlgorithmTuner.qml`) before the workload step; the other four algorithms have nothing to tune. Left: the five §6.1 score weights and the four §6.4 class quanta, each a `TerminalStepper`. Right: the live formula in cyan (§2.5, the scheduler's-reasoning hue), switched-off terms dimmed. `[ RESET TO PRD DEFAULTS ]` restores the as-specified formula. A tuned AARS shows an amber `[TUNED]` on its picker row and in the tuner.
+  - **CUSTOM workload.** The workload step gains `[ PRESETS ] [ + CUSTOM ]` tabs (Tab toggles). Custom swaps the file list for `CustomWorkloadEditor.qml`: name, quantum, arrival pattern (ALL AT ONCE / STAGGERED / CLUSTERED) and spacing, seed, and up to 6 process **groups** (type CPU-BOUND / BALANCED / INTERACTIVE × count, each with its own burst and priority range; type sets the starting ranges). The `WorkloadCard` on the right stays visible and redraws on every edit from the generated processes: the usual stats, a COMPOSITION count per type, and a skyline of the processes (height = burst, color = their §2.3 dashboard hue).
+- **Added 2026-10-22 (explicit user request):**
+  - **OS schedulers section.** Under the five original rows, a `+--- REAL-WORLD OS SCHEDULERS ----` rule (pane-title grammar at `label` size) introduces rows 6 and 7, `MLFQ (WINDOWS)` and `CFS (LINUX)`, with ABOUT cards like the rest. The row list scrolls only if the window is too short to hold it.
+  - **`[ RUN ONE ] [ COMPARE TWO ]`** (Tab toggles). In compare mode a row click (or its number key) assigns it to A, then B; the chosen rows take `bgPanelRaised`, a primary border and an inverted `[A]` / `[B]` badge — a word, not a hue. `[ AARS vs MLFQ ]` and `[ AARS vs CFS ]` set both at once; `[ CONTINUE > ]` is enabled once both are set. The workload step then reads `[ COMPARE > ]` and `--compare a,b`.
+  - **Workload card:** the RR quantum line became `SLICING  RR 4 · MLFQ 4/8/16 boost 40 · CFS slice ≥4` — the per-workload parameters the two new algorithms run with, resolved by the engine (including any `"mlfq"`/`"cfs"` overrides in the file).
+  - **Keyboard:** ↑/↓ select a workload preset, so the whole flow runs without a mouse; a failed run shows `[ERR] <reason>` beside the RUN button.
 - The dashboard consequently has **no picker zone**. Its former Zone C is now the playback control strip alone (§5.6).
 
 ### 5.8 Process progress ticker (new panel, 2026-08-23 — not in the original spec)
@@ -430,7 +449,7 @@ Added at explicit request; the one panel here with no ancestor in the original w
 
 - One row per process, stacked vertically, each row a horizontal progress bar that fills tick by tick and reaches 100% exactly at that process's `completionTime`.
 - Row anatomy: `P<id>` label · the bar · a right-aligned readout. No identity glyph (§2.3 is hue-only as of 2026-08-25).
-- **The bar is a `FluidBar`, not a character bar** — the one logged exception to §2.7(7), because this panel is read as motion rather than as a value. Fill color is the process's §2.3 hue; motion spec in §6.9.
+- **The bar is a `TickBar`** (was `FluidBar` until 2026-10-16), **not a character bar** — the one logged exception to §2.7(7), because this panel is read as motion rather than as a value. Fill color is the process's §2.3 hue; motion spec in §6.9.
 - **The `P<id>` label is drawn in the process's own hue in every state** (revised 2026-08-25, explicit user request) — running, waiting, or done — not dimmed to `textSecondary` when it isn't the currently-running row. A viewer tracking "which one is P3" needs that color to stay put across the whole run, not just while P3 happens to be on the CPU. `font.weight` still goes bold while running, so the currently-owning row is still distinguishable — just not by losing its color when it isn't.
 - Processes that have not yet arrived render at reduced opacity, so a viewer can see the whole cast of the workload from tick 0 and watch them switch on as they arrive.
 - Completed processes show `[DONE]` in `accentBlue` (§2.5, structural/reference) in place of the percentage.
@@ -458,7 +477,7 @@ and the presets exist precisely because they stress the algorithms differently.
   visibly queue. This is the single most useful number for predicting what the
   run will look like, which is why it gets its own block rather than a table row.
 - **Every number is computed from the workload file** by `WorkloadListModel`,
-  never authored alongside it. `CLAUDE.md` forbids hardcoded illustrative
+  never authored alongside it. `AGENTS.md` forbids hardcoded illustrative
   metrics, and a statistic written next to the data it describes is exactly
   that — it can drift silently. The only authored field is `description`, which
   is editorial prose about the shape of the load, not a measurement.
@@ -502,6 +521,28 @@ happened to P7?" otherwise has to reconstruct it from four panels.
 - It slides vertically to track the hovered row (`durationBase`, `OutCubic`) and
   fades in over `durationFast`. Clamped to the window so a row near the top or
   bottom edge never pushes it off-screen.
+- **Live (fixed 2026-10-22):** the HUD holds the hovered row's *index* and re-reads
+  it every tick, so it follows playback under a stationary pointer instead of
+  showing the moment the hover began. A process that has not run yet reads
+  `PENDING`, not the class it will eventually earn. It also shows `PRIORITY`, and
+  under CFS `NICE / WEIGHT`.
+
+### 5.10a Scrollbars (new, 2026-10-22 — logged addition to §2.7, explicit user request)
+
+Every region that can scroll — process ticker, ready queue, why-panel reasons, aging list, scoreboard, the compare ticker, the workload list, the algorithm list, the tuner and the custom-workload editor — carries one `NeonScrollBar` on its right edge: a 5px rail of `textPrimary` at 0.17 opacity (0.28 under the pointer) with a solid `textPrimary` thumb (0.7 → 1.0 under the pointer). Flat rectangles, zero radius, no glow, no arrows. The thumb drags, a click on the rail jumps there, and the wheel scrolls. It is absent when the content fits, and content leaves a gutter for it so the rail never covers a right-aligned value. It is the only scrollbar in the app.
+
+### 5.11 Compare screen (new, 2026-10-22)
+
+Two algorithms, the same processes, one clock. Reached from `[ COMPARE TWO ]` (§5.7); built entirely from the dashboard's own parts so it moves and reads like the screen it is a variant of.
+
+- **Top bar:** the `CHRONOS` title lockup (§3.1 place 2 — this is the dashboard's comparison variant, not a fifth display use), `$ chronos --compare a,b --workload <name>`, and four stat tiles: `A DONE` / `B DONE` (n/total, same hue — the same measure read against itself) and `A SWITCHES` / `B SWITCHES` (magenta, like the dashboard's switch tile).
+- **Two Gantt timelines**, titled `A // <NAME>` and `B // <NAME>`, sharing one `maxTick`, so their axes line up tick for tick and a viewer reads straight down from A to B. One playhead position drives both.
+- **Dual process ticker:** per process, A's `TickBar` and readout, then B's. The readout is the dashboard ticker's: a percentage, then `[DONE]` in `accentBlue` (revised 2026-10-22, replacing `@<finish tick>`, which did not read as anything).
+- **Two why-panels** (right column, revised 2026-10-22 at explicit user request): `A // WHY <NAME>` above `B // WHY <NAME>`, each the dashboard's §5.4 why-panel for its own side, updating every tick. Previously this column held the scoreboard and verdict, and so sat static for the whole run.
+- **Verdict popup** (revised 2026-10-22, explicit user request). A button at the end of the scrub row reads `[ >>| END ]` (skip to end) while either run is still going, and `[ VERDICT ]` in inverted video once both have finished. It opens a popup (`VerdictPopup.qml`) that grows out of the button: an inverted title bar (`VERDICT // <WORKLOAD>`, §2.7(3)) with `[ _ MINIMIZE ]`; `[A]/[B] <NAME> WINS` or `EVEN` typed in once (mono `h1`+, bloom, no flicker) with the tally; the **scoreboard**; and for each side `+ [A] <NAME> IS BETTER AT n` with the metrics listed — a loss is shown as plainly as a win. Minimize, Esc, or a click outside shrinks it back into the button. It closes if the playhead leaves the end, because it describes finished runs.
+  - **Scoreboard:** the nine metrics of `PRD.md` §8.3, A and B values, and a `WIN` column with an inverted `[A]`/`[B]` badge or `TIE`. The rows reveal in reading order each time the popup opens (the one-time fade-and-rise of §6.7). The winning value is bold primary, the other secondary — weight and a word, never hue alone. A two-line strip below explains the hovered metric, or why CPU utilization and throughput always tie.
+  - **Backdrop — logged addition to §2.7 (2026-10-22):** while the popup is open the screen behind it is covered by `bgVoid` at 0.82 opacity. It is the void colour, not a tint or a blur, and it exists only for this popup; it is the one modal surface in the app.
+- **Keyboard:** as the dashboard (Space, ←/→, R, Esc) plus `E` for end and `V` for the verdict popup. Esc minimizes the popup if it is open, and otherwise leaves the screen. Pressing play at the end restarts from tick 0.
 
 ---
 
@@ -566,7 +607,9 @@ When the scheduler switches which process is running (a context switch):
 - Before any JSON is loaded: the main grid shows a centered placeholder panel — "No simulation loaded. Choose an algorithm and workload below, then press RUN." in `--text-dim`, with a faint animated scan-line effect across the panel background (a horizontal 2px `--border-default` line sweeping top-to-bottom on a 3s loop) as the one purely-decorative flourish in the whole spec — justified because it's the one moment the screen would otherwise be dead empty.
 - While the C++ binary is presumed running (if wired to the optional local-server stretch goal from PRD 7.7): a simple indeterminate progress bar in `--text-primary`, not a spinner — fits the horizontal/linear language of the rest of the UI (Gantt track, scrub bar) better than a circular spinner would.
 
-### 6.9 Liquid fill — the process ticker bars (new 2026-08-24b, segmented 2026-08-25)
+### 6.9 Ticking fill — the process ticker bars (liquid 2026-08-24b, segmented 2026-08-25, **ticking 2026-10-16**)
+
+> **Superseded 2026-10-16 (explicit user request): the bars tick like an analog watch instead of flowing.** `TickBar.qml` replaces `FluidBar.qml`. The segment grid (pitch ~6px + 2px gap) is unchanged, but nothing eases: (1) a segment is either lit or not and snaps on; (2) when progress advances, the newly-earned segments light **one at a time**, in sequence, at a steady cadence, then the bar rests until the next simulation tick — the cadence is `stepBudget / segmentsToLight`, clamped 16–110ms, with `stepBudget = min(900, 650 / ticksPerSecond)` so it always finishes inside one tick interval at every speed; (3) the **leading segment** is drawn in a brighter tint of the process hue (`Qt.lighter(hue, 1.55)`) and flashes briefly on each step, so each tick registers as an event; (4) stepping back, scrubbing or reset **snaps** immediately — a watch does not tick in reverse. The sheen and meniscus are removed, so this component no longer uses a gradient at all. Everything else holds: zero radius, flat color, ASCII brackets, hue as the only identity channel, ticker-only scope. The liquid spec below is kept as history.
 
 Added at explicit request: the progress bars should move "as if it's like a smooth liquid." This is the reason the ticker bars are a `FluidBar` rather than a character bar (§2.7(7), logged deviation) — a glyph bar advances in whole-cell steps, and at roughly one tick per cell that is a row of characters switching on and off, which is the opposite of flow.
 
@@ -577,6 +620,8 @@ Added at explicit request: the progress bars should move "as if it's like a smoo
 3. **A single travelling sheen sweeps across the entire filled span**, independent of the segment grid underneath, running only while that process holds the CPU. This is what keeps the segmented body reading as *one* liquid surface rather than a row of separate cells — without it, a paused bar would read as static blocks; with it, filled segments together still read as held liquid. It stops when the process stops, so the sheen also doubles as a live "this one is running" signal.
 
 The unfilled remainder of each segment is its own faint track tint, not blank space, so a bar at 0% still reads as a measured row of cells. ASCII `[` `]` brackets are kept at both ends: the fill is segmented, but it still sits inside the terminal's grammar.
+
+**The step flash (fixed 2026-10-22)** is `Qt.lighter(fillColor, 1.9)`, a tint of the process's own hue — it was `#FFFFFF`, which is not in §2.1's closed table.
 
 **No per-process glyph or symbol anywhere in this component** (§2.3 is hue-only as of 2026-08-25) — `fillColor` (the process's `Theme.procShade(pid)`) is the only thing that identifies which process a bar belongs to.
 
@@ -612,7 +657,7 @@ A single horizontal stacked bar, height ~20px, showing the AARS formula visually
 These are generated as static images by Matplotlib, not live in the dashboard — but should follow the same palette for visual consistency between "live dashboard" and "final report" so a viewer doesn't experience a jarring style switch mid-presentation.
 
 - Matplotlib figure background: `#000000`, axes background: `#0A0F0A`.
-- Bar colors: one bar per **algorithm** (not per process) — a fixed 6-color mapping drawn from the §2.3 hue table (FCFS, SJF, RR, Priority, MLFQ, AARS), consistent across every comparison chart so an algorithm keeps one color throughout the whole report. Reuse the §2.3 hexes rather than inventing chart colors, so the static report and the live dashboard read as one system.
+- Bar colors: one bar per **algorithm** (not per process) — a fixed 7-color mapping drawn from the §2.3 hue table, consistent across every comparison chart so an algorithm keeps one color throughout the whole report. As implemented in `analysis/analysis.py` (2026-10-22): FCFS `#4D9FFF`, SJF `#FFB000`, Round Robin `#00E5FF`, Priority `#C77DFF`, AARS `#33FF00`, MLFQ (Windows) `#FF3EC9`, CFS (Linux) `#FF7A29`. Reuse the §2.3 hexes rather than inventing chart colors, so the static report and the live dashboard read as one system.
 - Text/labels/axis: `--text-primary` green, gridlines: `--border-default`, using the same JetBrains Mono font family (Matplotlib can load `.ttf` files directly) so charts visually match the dashboard.
 - `AARS`'s bar/line should NOT be artificially emphasized (no bold outline, no different chart type) — per PRD Section 2.4, results must be reported honestly including where AARS loses, and the chart styling should not editorialize.
 
@@ -696,7 +741,7 @@ Two tokens that no longer exist, deliberately: `bgPanel` (panes share `bgVoid` a
 
 Consistent with the PRD's own non-goals: no responsive/mobile breakpoints beyond "don't break above 1280px," no dark/light theme toggle (jet-black is the only theme), no icon library dependency (use inline SVG or unicode glyphs to avoid adding a font-icon build dependency).
 
-> ✎ **Logged deviation (post-Milestone-1):** the "no animation library dependency" rule above was deliberately overridden, on explicit request, for 4 specific enhancements: panel load-in stagger, stat-tile number counters, Gantt/button hover micro-interactions, and playhead motion. GSAP is vendored locally (no CDN, per the offline-demo-safety note in `ARCHITECTURE.md` §5.1). Every other panel/interaction in Section 6 is still plain CSS, and any GSAP timing must stay within this section's "fast and purposeful" principle — `power1`/`power2` easings only, no bounce/elastic/overshoot (those read as sloppy on dense informational UI, not as polish). See `CLAUDE.md`'s Dashboard rules for the enforcement note.
+> ✎ **Logged deviation (post-Milestone-1):** the "no animation library dependency" rule above was deliberately overridden, on explicit request, for 4 specific enhancements: panel load-in stagger, stat-tile number counters, Gantt/button hover micro-interactions, and playhead motion. GSAP is vendored locally (no CDN, per the offline-demo-safety note in `ARCHITECTURE.md` §5.1). Every other panel/interaction in Section 6 is still plain CSS, and any GSAP timing must stay within this section's "fast and purposeful" principle — `power1`/`power2` easings only, no bounce/elastic/overshoot (those read as sloppy on dense informational UI, not as polish). See `AGENTS.md`'s Dashboard rules for the enforcement note.
 
 ---
 
@@ -717,7 +762,7 @@ Not part of the original spec — added on explicit request after Milestone 1, a
 ### 9.3 What is gone from the old spec, and why
 
 - **No real scroll input.** The web version used GSAP ScrollTrigger with `pin: true` and `scrub`. There is no page to scroll in a native window, and requiring a scroll gesture to get past a splash screen is a bad first interaction in a desktop app. The reveal auto-plays instead — same visual language, no input needed.
-- **No ink-drip animation.** An intermediate concept between the two; replaced at explicit request. Do not reintroduce a "drip" without asking first (restated in `CLAUDE.md`).
+- **No ink-drip animation.** An intermediate concept between the two; replaced at explicit request. Do not reintroduce a "drip" without asking first (restated in `AGENTS.md`).
 - **No CRT power-on flicker.** The old one-shot opacity-stutter *entrance* is dropped: with real scanlines present full-time (§2.7), a hard flicker on arrival reads as a rendering glitch rather than as an effect. This is not the same thing as §6.10's continuous flicker, which is a shallow, always-on modulation of the bloom rather than a one-time entrance stunt, and which the wordmark does carry.
 
 ### 9.4 Skip + accessibility

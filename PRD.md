@@ -4,7 +4,7 @@
 
 Author: Rohit
 Draft date: August 22, 2026
-Status: Draft v1 — for personal editing before build, intended to be dropped into a repo as `PRD.md` and used as project context for Claude Code
+Status: Draft v1 — for personal editing before build, intended to be dropped into a repo as `PRD.md` and used as project context for AI-assisted development
 
 > ✎ **EDIT ME:** This whole document is yours to change. Every number (weeks, thresholds, weights) is a starting guess, not a rule. Places you'll most likely want to tweak are marked like this throughout.
 
@@ -53,7 +53,7 @@ Your original plan implied a live dashboard: the C++ backend running the simulat
 
 **Decision:** the C++ simulator runs the entire simulation for a given workload instantly, start to finish, producing every tick and every scheduling decision in memory. The dashboard then replays it, with play, pause, step-forward, step-back, and a speed slider. This part of the decision still holds exactly as written — **what changed (2026-08-23 pivot, see edit-note below) is the dashboard itself**: it is now a native Qt/QML desktop app that links the simulator in-process (no JSON round-trip for interactive use, no server, still nothing to keep alive during a demo), not a web page loading a JSON file. The original "no live backend" reasoning is exactly why this was safe to do — there was never a network/socket boundary to begin with, just a file boundary, and swapping a file-read for an in-process function call doesn't reintroduce the live-backend complexity this section was written to avoid. The CLI still writes the JSON file described below, for `analysis.py`.
 
-> **Logged deviation (2026-08-23):** the "web dashboard" throughout this document (originally: static HTML/CSS/JS, opened in a browser, loading a JSON file) was replaced with a native Qt 6 / QML desktop application per explicit user request — a polished animated executable was wanted, not something opened in a browser. See `CLAUDE.md`'s "Architecture pivot" note and `ARCHITECTURE.md` §5 for the current GUI architecture. Every other reference to "the dashboard" in this document below should be read as "the native GUI" — the panel *contents* (Gantt chart, ready queue, why-panel, aging indicator, playback controls) are unchanged from the original spec, plus one new panel (per-process progress ticker, `EDRD.md` §5.8) that wasn't in the original spec.
+> **Logged deviation (2026-08-23):** the "web dashboard" throughout this document (originally: static HTML/CSS/JS, opened in a browser, loading a JSON file) was replaced with a native Qt 6 / QML desktop application per explicit user request — a polished animated executable was wanted, not something opened in a browser. See `AGENTS.md`'s "Architecture pivot" note and `ARCHITECTURE.md` §5 for the current GUI architecture. Every other reference to "the dashboard" in this document below should be read as "the native GUI" — the panel *contents* (Gantt chart, ready queue, why-panel, aging indicator, playback controls) are unchanged from the original spec, plus one new panel (per-process progress ticker, `EDRD.md` §5.8) that wasn't in the original spec.
 
 This still looks and feels completely "live" to anyone watching your demo — arguably it looks better, because you can pause on the exact interesting moment (an aging boost, a preemption) and explain it. And re-running a different workload is just: pick it from the in-app list and press RUN — no separate terminal step at all now, an improvement over the original file-refresh flow.
 
@@ -130,14 +130,17 @@ ChronOS/
 │   ├── process.h/.cpp        Process struct + state enum
 │   ├── behavior_analyzer.h/.cpp   burst/I-O classification
 │   ├── workload_io.h/.cpp    loadWorkload() — shared by CLI + GUI
+│   ├── workload_gen.h/.cpp   seeded synthetic workloads for the GUI's custom builder (2026-10-16)
 │   ├── scheduler_factory.h/.cpp  makeScheduler()/algorithmDisplayName() — shared
+│   ├── comparison.h/.cpp     head-to-head metrics + verdict (§8.3) — shared (2026-10-22)
 │   ├── schedulers/
 │   │   ├── fcfs.cpp
 │   │   ├── sjf.cpp
 │   │   ├── round_robin.cpp
 │   │   ├── priority.cpp
-│   │   ├── mlfq.cpp          (Milestone 3)
-│   │   └── aars.cpp          your algorithm
+│   │   ├── aars.cpp          your algorithm
+│   │   ├── mlfq.cpp          MLFQ (Windows) — §6.6, built 2026-10-22
+│   │   └── cfs.cpp           CFS (Linux) — §6.7, built 2026-10-22
 │   ├── simulator.h/.cpp      the tick loop + JSON writer
 │   └── main.cpp              CLI entry point (not part of chronos_core)
 ├── app/                      (native Qt6/QML GUI — replaces dashboard/)
@@ -148,7 +151,10 @@ ChronOS/
 │   └── qml/                   Theme.qml, Splash.qml, AlgorithmPicker.qml, WorkloadPicker.qml,
 │                               Dashboard.qml + panel components (ARCHITECTURE.md §5.1 has the full list)
 ├── analysis/
-│   └── analysis.py           comparison table + Matplotlib charts
+│   ├── run_all.py            runs every algorithm × workload through the CLI
+│   └── analysis.py           comparison tables, head-to-head, Matplotlib charts
+├── tests/
+│   └── run_tests.py          engine test suite: §10 edge cases, invariants, validation (2026-10-22)
 ├── workloads/
 │   ├── tiny_batch.json
 │   ├── cpu_heavy.json
@@ -198,6 +204,7 @@ struct Process {
     int startTime = -1;
     int completionTime = -1;
     int contextSwitches = 0;
+    int nice = 0;           // -20..19, CFS's load weight (added 2026-10-22, see below)
 
     // behavior tracking (used by AARS + behavior analyzer)
     std::vector<int> burstHistory;   // completed burst lengths so far
@@ -208,6 +215,8 @@ struct Process {
 enum class State { NEW, READY, RUNNING, WAITING, TERMINATED };
 enum class ProcessClass { UNKNOWN, CPU_BOUND, IO_BOUND, INTERACTIVE, BALANCED };
 ```
+
+> ✎ **Added 2026-10-22 — `nice`:** Unix niceness, read only by CFS (§6.7) to pick each process's load weight. A workload may set it per process; otherwise the loader derives it from `basePriority` with `niceFromPriority()`: priority 5 → nice 0, two nice steps per priority level, so 10 → −10 and 1 → +8. Every existing workload therefore runs under CFS unchanged.
 
 > ✎ **Revised 2026-08-24 (issue #3):** `BALANCED` was added as a fifth value — it means "has run, but didn't clear either the CPU-bound or short-burst tests." Before it existed, that case fell through to `UNKNOWN`, which made "no opinion yet" and "ran and was unremarkable" the same word. `UNKNOWN` now means exactly one thing: **has not run yet.** The GUI relabels it `PENDING` for that reason. See §6.3 for the full classification rule as implemented.
 
@@ -227,6 +236,17 @@ Each workload preset is just a JSON array — easy to hand-author, easy to gener
 }
 ```
 
+> ✎ **Optional fields (added 2026-10-22, for MLFQ and CFS):** a process may carry `"nice"` (−20..19; default derived from `priority`, §5.1). The workload may carry two optional blocks; any field left out (or 0) is derived from `quantum`:
+>
+> ```json
+> "mlfq": { "levels": 3, "baseQuantum": 4, "boostInterval": 40 },
+> "cfs":  { "targetLatency": 32, "minGranularity": 4, "wakeupGranularity": 5 }
+> ```
+>
+> Defaults: MLFQ has 3 levels with quanta `q, 2q, 4q` and a boost every `10q`; CFS uses `minGranularity = q`, `targetLatency = 8q`, `wakeupGranularity = round(4q/3)` (§6.6/§6.7 explain why). The loader now also rejects `burstTime < 1`, `arrivalTime < 0`, `nice` outside −20..19, and duplicate PIDs — the tick loop would never finish a zero-length burst, and every per-PID lookup downstream assumes PIDs are unique.
+>
+> ✎ **Tightened 2026-10-22 (found by `tests/run_tests.py`):** also rejected — a negative `pid` (−1 is the simulator's "no process" sentinel, and a process with that PID made the run loop forever), `priority` outside 1..10 (the range §6.1's weights are sized for), an empty or missing `processes` list, negative values in the `mlfq`/`cfs` blocks (previously silently treated as "derive"), and non-integer fields, with the offending process named. `--out` now creates missing parent directories (`results/` is gitignored, so a fresh clone has none — before, the CLI printed "wrote" and wrote nothing) and fails with an error if the file cannot be written.
+
 ### 5.3 Result output format (JSON) — the dashboard's only input
 
 ```json
@@ -244,7 +264,7 @@ Each workload preset is just a JSON array — easy to hand-author, easy to gener
   ],
   "processStats": [
     { "pid": 1, "arrivalTime": 0, "burstTime": 8, "waitingTime": 6, "turnaroundTime": 9,
-      "responseTime": 3, "completionTime": 11, "contextSwitches": 2, "class": "CPU_BOUND" }
+      "responseTime": 3, "completionTime": 11, "contextSwitches": 2, "class": "CPU_BOUND", "nice": 0 }
   ],
   "summary": {
     "avgWaitingTime": 5.2, "avgTurnaroundTime": 8.1, "avgResponseTime": 3.0,
@@ -258,6 +278,8 @@ This one format is the entire contract between the C++ engine and the dashboard/
 > ✎ **Integration-time addition (Milestone 1):** each `decisionLog[].candidates[]` entry also carries `priority` (the process's `basePriority`), `burstRemaining` (its `remainingTime` at that tick), and `class` (its `predictedClass` as a string) — the original two-field `{pid, score}` shape had nowhere for the dashboard's ready-queue table (EDRD.md §5.3, PRIORITY/BURST/CLASS columns) to source those from, since the JSON has no other per-tick process snapshot. Every scheduler populates all three fields, not just AARS. For AARS specifically, `reasonTags` always includes all five PRD §6.1 formula terms as `"name:±value"` (`base_priority`, `aging_bonus`, `io_bonus`, `response_bonus`, `cpu_burst_penalty`), even when a term is 0 — the why-panel's score-breakdown bar (EDRD §7.1) renders a fixed 5-segment bar and needs every term present on every decision, not only the ones currently contributing.
 >
 > ✎ **Widened 2026-08-24:** `processStats[]` gained four fields, additively — `arrivalTime`, `burstTime`, `contextSwitches`, `class` (the process's final `predictedClass` as a string, §6.3). The native GUI's process HUD (EDRD.md §5.10) needs to describe a finished process on hover without re-reading the workload file alongside the result, and these are exactly the fields `ChronosBridge` (the GUI's engine binding — see ARCHITECTURE.md §5.1) can't otherwise reconstruct from `waitingTime`/`turnaroundTime`/`responseTime`/`completionTime` alone. `analysis.py` (issue #1) should read these fields rather than recompute them from the workload.
+>
+> ✎ **Widened again 2026-10-22:** `processStats[]` gained `nice` (additive) — the niceness CFS weighted that process by. All 40 pre-existing runs are otherwise byte-identical.
 
 ---
 
@@ -285,6 +307,8 @@ The highest-scoring READY process is scheduled next. Ties broken by lowest PID (
 
 > ✎ **EDIT ME:** These weights (÷2, cap 10, +4, +3, ÷5, cap 8) are placeholders sized to be roughly the same magnitude as your 1–10 base priority, so no single term totally dominates. You will very likely need to adjust them once you see real numbers — that tuning process is itself a legitimate part of your "research contribution" and worth writing up ("I started with X, observed Y, changed to Z because...").
 
+> ✎ **Runtime tuning (2026-10-16, explicit user request):** the weights above are now fields of `AarsParams` (`engine/schedulers/aars.h`) whose defaults are exactly these values, so the GUI can let a viewer explore them. An untuned run is byte-identical to before. Any run with a changed weight is named **"AARS (tuned)"** and is not AARS's reported result — §2.4's honesty rule is untouched. Tunable: the five §6.1 term weights and the four §6.4 class quanta — nothing else, so a tuned decision log carries the same tags as an untuned one.
+
 ### 6.3 Behavior classification (rule-based, no ML needed)
 
 After each burst completes, append it to that process's `burstHistory` (keep last 5). Recompute, per process, on every dispatch and at completion (not only when a burst finishes — see the "revised" note below for why):
@@ -295,12 +319,12 @@ After each burst completes, append it to that process's `burstHistory` (keep las
 - `CPU_BOUND` if `cpuEvidence > 15` ticks.
 - Else, if no burst has completed yet: `UNKNOWN` (still mid-first-burst, not yet long enough to call CPU-bound, and too early to trust the short-burst tests below).
 - Else if `avgBurst < 4` ticks AND `ioEvents > 0`: `IO_BOUND`.
-- Else if `avgBurst < 4` ticks AND `responseTime` was low (`<= kLowResponseTicks`, currently 2): `INTERACTIVE`.
+- Else if `avgBurst < 4` ticks AND `responseTime` was low (`<= kLowResponseTicks`, currently 3): `INTERACTIVE`.
 - Else: `BALANCED` — ran, completed at least one burst, but didn't clear either the CPU-bound or short-burst tests.
 
 `UNKNOWN` means exactly one thing: **has not run yet** (`burstHistory` empty and `consumed <= 0`). The GUI relabels it `PENDING`. `IO_BOUND` is currently unreachable in practice — nothing in the engine increments `ioEvents` (no I/O model yet, §2.1) — and that's expected, not a bug; don't loosen the condition to make the label appear.
 
-> ✎ **Revised 2026-08-24 (issue #3 — "mostly UNKNOWN on both Milestone-1 presets"):** the original rule (above, superseded) required **two completed bursts** before committing to any label. Under the three non-preemptive algorithms a process runs exactly once and terminates, so it never accumulated a second burst, and nearly every row in the UI read `UNKNOWN` for the entire run — the classifier was effectively dead outside RR/AARS. Two changes fixed it: one completed burst is now enough, and CPU consumed *so far* (mid-burst) counts as CPU-bound evidence, so the label is useful exactly when it matters most — while a long process is still running — rather than only after it finishes. The thresholds themselves (15 ticks, 4 ticks, window of 5, `kLowResponseTicks = 2`) are unchanged from the original guesses; they live as named constants in `engine/behavior_analyzer.cpp` and remain retunable, but any change is a logged decision, not silent drift.
+> ✎ **Revised 2026-08-24 (issue #3 — "mostly UNKNOWN on both Milestone-1 presets"):** the original rule (above, superseded) required **two completed bursts** before committing to any label. Under the three non-preemptive algorithms a process runs exactly once and terminates, so it never accumulated a second burst, and nearly every row in the UI read `UNKNOWN` for the entire run — the classifier was effectively dead outside RR/AARS. Two changes fixed it: one completed burst is now enough, and CPU consumed *so far* (mid-burst) counts as CPU-bound evidence, so the label is useful exactly when it matters most — while a long process is still running — rather than only after it finishes. The thresholds themselves (15 ticks, 4 ticks, window of 5, `kLowResponseTicks = 3`) are unchanged from the original guesses; they live as named constants in `engine/behavior_analyzer.cpp` and remain retunable, but any change is a logged decision, not silent drift. *(Doc fix 2026-10-22: this section said `kLowResponseTicks` was 2; the code has always been 3. The code was not changed — the document was wrong.)*
 
 ### 6.4 Dynamic time quantum (used only when AARS preempts on a quantum boundary, similar to Round Robin)
 
@@ -316,6 +340,34 @@ After each burst completes, append it to that process's `burstHistory` (keep las
 - **Real pthreads:** reimplement the simulator's tick loop using actual threads + mutexes for the ready queue, purely as a "look, I can also do it the hard way" bonus section — keep the JSON-producing simulation as the primary/graded path so a threading bug can't take down your whole demo.
 - **Large-scale benchmark mode:** run 1,000–5,000 synthetic processes and report how each algorithm's runtime and metrics scale, as a short appendix rather than a core feature.
 - **A simple fairness index** (e.g. Jain's fairness index over CPU-time-received vs. CPU-time-needed) — cheap to add once you already have per-process stats, and it strengthens the comparison section.
+
+### 6.6 MLFQ — "MLFQ (Windows)" (built 2026-10-22, Milestone 3 item 1, explicit user request)
+
+The textbook Multilevel Feedback Queue (Arpaci-Dusseau, *OSTEP* ch. 8; Silberschatz §5.3.6), `engine/schedulers/mlfq.*`. Labelled "(Windows)" in the GUI at the user's request because Windows' scheduler belongs to this family; what is implemented is the plain textbook algorithm, not Windows' 32-level variant with I/O and GUI wake-up boosts (which this simulator cannot model — no I/O, §2.1). The ABOUT card says so.
+
+1. A higher queue always runs before a lower one, **preemptively**: a process arriving in a higher queue takes the CPU at once.
+2. Within a queue, round robin.
+3. A new process enters Q0.
+4. A process that uses up its **allotment** at a level — however many slices that took — moves down one level. A process preempted mid-slice keeps the remainder of its allotment rather than starting again. The bottom queue is plain round robin.
+5. Every `boostInterval` ticks, every process returns to Q0.
+
+Defaults: 3 queues, quanta `q, 2q, 4q` (doubling per level, the textbook shape), boost every `10q` (OSTEP's example ratio), all anchored to the workload's `quantum` so MLFQ sees the same time scale as Round Robin. Reason tags: `highest_queue`, `queue:Q<n>`, `allotment:<left>_of_<q>`, `round_robin_in_queue`, `preempted:P<n>`, `demoted:P<n>_to_Q<m>`, `priority_boost`. Each candidate's `score` in the decision log is its queue level (lower runs first).
+
+### 6.7 CFS — "CFS (Linux)" (built 2026-10-22, explicit user request)
+
+Linux's Completely Fair Scheduler (default from 2.6.23 until EEVDF replaced it in 6.6), `engine/schedulers/cfs.*`. EEVDF was considered and not built: its advantage over CFS is latency for tasks that sleep and wake, and with no I/O model (§2.1) nothing here sleeps, so it would be near-indistinguishable from CFS in this simulator.
+
+- **vruntime:** each process accrues `ticks run × 1024 / weight`; the lowest vruntime runs next. The run queue is literally a red-black tree — `std::set<(vruntime, pid)>` — and the pick is its leftmost node. Ties → lowest PID.
+- **Weight** from `nice` via Linux's own `sched_prio_to_weight` table (nice 0 = 1024, ~1.25× per step).
+- **Slice:** `period × weight / Σweight`, never below `minGranularity`, where `period = max(targetLatency, n × minGranularity)` (Linux's `sched_slice`).
+- **Placement:** a new arrival starts at the run queue's `min_vruntime`, and preempts the running process if that one is ahead by more than `wakeupGranularity` (scaled by the arrival's weight — Linux's `check_preempt_wakeup`). Linux also gives newly forked tasks a `START_DEBIT` penalty; that is left off, so CFS is shown in its most favourable light rather than handicapped.
+- **Time scale:** Linux's defaults are 6 ms latency, 0.75 ms minimum granularity, 1 ms wakeup granularity (8 : 1 : 1.33). Ticks are not real milliseconds, so the *ratios* are kept and anchored to the workload's quantum: `minGranularity = q`.
+
+Reason tags: `lowest_vruntime`, `vruntime:<v>`, `next_vruntime:<v>`, `nice:<n>_weight_<w>`, `slice:<s>_of_<period>`, `wakeup_preempted:P<n>`. Each candidate's `score` is its vruntime (lower runs first).
+
+Both algorithms need one engine hook the original five did not: `Scheduler::shouldPreempt()` (ARCHITECTURE.md §3.2), called mid-slice. Its default returns false, so FCFS/SJF/RR/Priority/AARS are byte-identical to before (verified: all 40 original runs).
+
+**Honesty rule, extended:** MLFQ's and CFS's parameters are textbook/kernel defaults scaled to the workload, chosen before any comparison was run and never adjusted afterwards. Weakening a competitor to make AARS look better is the same violation as tuning AARS to win (§2.4).
 
 ---
 
@@ -385,6 +437,24 @@ This is the single highest-value feature for a demo — it turns AARS from a bla
 - Bar chart: context switches by algorithm
 - Grouped bar chart: all algorithms across all 3–4 workload presets (this is the chart that actually proves "adaptive behavior changes with workload," which is your core claim)
 
+### 8.3 Head-to-head comparison (added 2026-10-22, explicit user request)
+
+Two algorithms, the same processes, one verdict: which is better on each metric. Defined once in `engine/comparison.*` and used identically by the GUI's compare screen (EDRD §5.11) and `chronos --compare a,b`; `analysis/analysis.py` mirrors the same definitions (cross-checked: 432 of 432 verdicts identical).
+
+| Metric | Better | Definition |
+|---|---|---|
+| Avg waiting | lower | `summary.avgWaitingTime` |
+| Avg turnaround | lower | `summary.avgTurnaroundTime` |
+| Avg response | lower | `summary.avgResponseTime` |
+| Worst waiting | lower | max `waitingTime` over processes — closeness to starvation |
+| Avg slowdown | lower | mean `turnaround / burst` (normalised turnaround) |
+| Context switches | lower | `summary.contextSwitches` |
+| Fairness (Jain) | higher | Jain's index over `burst / turnaround`; 1 = every process slowed equally |
+| CPU utilization | higher | `summary.cpuUtilization` |
+| Throughput | higher | `summary.throughput` |
+
+Values equal to 6 decimal places are a tie. CPU utilization and throughput always tie in this simulator, because every scheduler here is work-conserving and switches are free — the GUI says so rather than hiding the rows.
+
 Everything under Section 8 should be generated from data, not written by hand — hardcoding example numbers (as your original plan's illustrative table did) is fine for this PRD, but your actual submitted report must only contain numbers your own code produced.
 
 ---
@@ -422,6 +492,8 @@ Each milestone ends with something you can actually run and show — not just co
 
 ### Milestone 3 — MLFQ + depth (target: end of week 5, if time allows)
 
+> ✎ **Status 2026-10-22:** item 1 (MLFQ) and item 2 (in the comparison table/charts) are done, along with CFS (§6.7), which was not in the original plan and was added at explicit user request. Item 3 (arrival preemption for AARS, issue #5) is still open — the `shouldPreempt()` hook it needs now exists.
+
 1. Implement MLFQ: at minimum 3 queues, demotion on quantum exhaustion, promotion via periodic full priority-boost (simplest correct version — don't over-engineer the promotion rule).
 2. Add MLFQ to the comparison table and charts.
 3. Preemption support in AARS if not already present in v1 (a new arrival with a much higher score can preempt the running process — track it as a context switch).
@@ -440,6 +512,8 @@ Each milestone ends with something you can actually run and show — not just co
 ## 10. Testing & Edge Cases
 
 Before considering any milestone "done," run these against every implemented algorithm. Keep expected outputs for the simple ones (Test 1–3) written down so you can catch regressions.
+
+> ✎ **Automated 2026-10-22 (issue #7):** `tests/run_tests.py` runs all ten cases below against all seven algorithms through the real CLI, and on every run checks the invariants that must hold for any correct scheduler here: each process finishes exactly once with consistent waiting/turnaround/response; the Gantt chart is ordered, never runs a process early or late, and gives each exactly its burst; the CPU is never idle while work is ready; the summary agrees with the per-process stats; every decision picks a logged candidate; and the output is deterministic. On top of that: hand-worked schedules (§5.2's example and Tiny Batch under FCFS/SJF/RR, an MLFQ preemption-and-demotion case, CFS weighting), tie-breaking, input-validation cases (§5.2), CLI argument errors, and the C++/Python comparison cross-check. 34 tests, all passing.
 
 | # | Case | What it catches |
 |---|---|---|

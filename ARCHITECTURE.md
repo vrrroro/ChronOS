@@ -1,6 +1,6 @@
 # ChronOS — Architecture
 
-System design reference. Covers component responsibilities, module boundaries, data flow, and interaction contracts. For *why* these decisions were made, see `PRD.md` §2 and §4. For dashboard visuals, see `EDRD.md`. For build rules, see `CLAUDE.md`.
+System design reference. Covers component responsibilities, module boundaries, data flow, and interaction contracts. For *why* these decisions were made, see `PRD.md` §2 and §4. For dashboard visuals, see `EDRD.md`. For build rules, see `AGENTS.md`.
 
 ---
 
@@ -57,15 +57,18 @@ engine/
 ├── process.h/.cpp             Process struct, State enum, ProcessClass enum
 ├── behavior_analyzer.h/.cpp    burst-history tracking + classification rules
 ├── workload_io.h/.cpp          loadWorkload() — shared by CLI and GUI
+├── workload_gen.h/.cpp         generateWorkload(WorkloadSpec) — seeded, deterministic custom workloads (2026-10-16)
 ├── scheduler_factory.h/.cpp    makeScheduler()/algorithmDisplayName() — shared by CLI and GUI
+├── comparison.h/.cpp           head-to-head metrics + verdict (PRD §8.3) — shared by CLI --compare and GUI (2026-10-22)
 ├── schedulers/
 │   ├── scheduler_base.h        common interface all schedulers implement
 │   ├── fcfs.cpp
 │   ├── sjf.cpp
 │   ├── round_robin.cpp
 │   ├── priority.cpp
-│   ├── mlfq.cpp                (Milestone 3)
-│   └── aars.cpp
+│   ├── aars.cpp
+│   ├── mlfq.cpp                textbook MLFQ, shown as "MLFQ (Windows)" (PRD §6.6, 2026-10-22)
+│   └── cfs.cpp                 Linux CFS, shown as "CFS (Linux)" (PRD §6.7, 2026-10-22)
 ├── simulator.h/.cpp            the tick loop, ready/waiting queues, JSON writer
 └── main.cpp                    CLI entry point only (not part of chronos_core)
 ```
@@ -90,12 +93,21 @@ public:
     // in the current process's slice, or -1 if not quantum-based.
     virtual int currentQuantum(const Process& running) const { return -1; }
 
+    // Called every tick while a process is mid-slice. true = end the slice
+    // now and call selectNext() this tick. Default false. (Added 2026-10-22.)
+    virtual bool shouldPreempt(const Process& running, const std::vector<Process>& readyQueue,
+                               int currentTick) { return false; }
+
     // For logging/dashboard: explain the selectNext decision just made.
     virtual DecisionLog explainLastDecision() const = 0;
 
     virtual std::string name() const = 0;
 };
 ```
+
+**`shouldPreempt` (added 2026-10-22)** is the one addition since Milestone 1: MLFQ needs it so a higher queue can take the CPU mid-slice, CFS for wakeup preemption. The three-place `if` in the tick loop (§3.3, step 4) was already written for it. Because the default returns false, the five original schedulers never reach the scheduling block mid-slice and their output is byte-identical (checked: all 40 original runs, ignoring the new additive `nice` field). It is also exactly the hook issue #5 (arrival preemption for AARS) needs.
+
+Schedulers may keep their own per-PID state (MLFQ: level + allotment used; CFS: vruntime + weight). Neither needs a signal from the simulator about slice ends: each reads CPU used off `burstTime − remainingTime` whenever it is called and folds in the difference.
 
 Rationale: `simulator.cpp` (Section 3.3) is written once, against this interface. Adding MLFQ later, or retuning AARS, never touches the simulator core — only the scheduler's own `.cpp` file. This is what makes the Milestone 1 → 3 split in the PRD safe: the simulator loop doesn't change when a new scheduler is added, so proving it correct once (against FCFS, the simplest case) proves the loop itself is trustworthy for every algorithm after.
 
@@ -180,6 +192,13 @@ Only `aars.cpp` reads `predictedClass` and `avgBurstHistory` for scheduling deci
 
 `AARSScheduler::selectNext` computes `Score(p, tick)` for every process in `readyQueue` per the formula in `PRD.md` §6.1, using the analyzer's `predictedClass`/`avgBurstHistory` and the process's own `waitingTime`/`responseTime` fields — no additional state beyond what's already on `Process`. `currentQuantum` looks up the table in `PRD.md` §6.4 keyed on `predictedClass`. `explainLastDecision` must return every candidate's score and the winning process's reason tags (see Section 4.3 below) — this is not optional instrumentation, it's required by the JSON schema and by the dashboard's why-panel.
 
+### 3.5a MLFQ and CFS internals (`mlfq.cpp`, `cfs.cpp`, 2026-10-22)
+
+Full rules in `PRD.md` §6.6/§6.7. Parameters are resolved per workload by `resolveMlfq()`/`resolveCfs()` from the workload's `quantum` plus its optional `"mlfq"`/`"cfs"` blocks (`PRD.md` §5.2), so `makeScheduler()` is still the only constructor call site.
+
+- **MLFQ** tracks `{level, used, lastConsumed}` per PID. `selectNext` accounts every ready process's new CPU into its allotment (demoting it once spent), applies the periodic boost, then picks the first process (FIFO order) at the lowest level. `shouldPreempt` applies the boost and returns true when any ready process sits in a higher queue than the running one. `currentQuantum` returns what is left of the running process's allotment at its level.
+- **CFS** tracks `{vruntime, weight, lastConsumed}` per PID and a monotonic `min_vruntime`. `selectNext` updates vruntimes, places unseen processes at `min_vruntime`, builds a `std::set<(vruntime, pid)>` and takes its first element; the slice is the weighted share of the latency period. `shouldPreempt` updates the running process, places new arrivals, and preempts if the running process is ahead of one by more than the (weight-scaled) wakeup granularity.
+
 ### 3.6 JSON I/O
 
 - Input: one workload JSON (`PRD.md` §5.2) parsed with `nlohmann/json` at startup.
@@ -231,7 +250,7 @@ app/
 ├── ChronosBridge.h/.cpp       QObject exposed to QML as `bridge` — owns the current
 │                               SimulationResult, calls chronos_core in-process, and
 │                               exposes every per-tick derived view (readyQueueAt(tick),
-│                               whyPanelAt(tick), agingListAt(tick), processTickerAt(tick),
+│                               whyPanelAt(tick), agingAt(tick), processTickerAt(tick),
 │                               ganttSegments(), cpuUtilizationAt(tick), etc.)
 ├── WorkloadListModel.h/.cpp   QAbstractListModel listing workloads/*.json for the
 │                               in-app file browser (no OS file dialog)
@@ -253,8 +272,18 @@ app/
     ├── ProcessTicker.qml       one stacked progress bar per process (not in original EDRD)
     ├── ProcessHud.qml          EDRD §5.10 — floating per-process explainer, shown on hover
     │                             over a finished ticker bar; positioned clear of the ticker
-    │                             itself (see GUI rules in CLAUDE.md)
-    ├── FluidBar.qml            liquid progress fill, scoped to ProcessTicker only (EDRD §6.9)
+    │                             itself (see GUI rules in AGENTS.md)
+    ├── TickBar.qml             segment-by-segment ticking fill, scoped to ProcessTicker only (EDRD §6.9;
+    │                             replaced FluidBar.qml 2026-10-16)
+    ├── TerminalStepper.qml     `[-] value [+]` numeric input (tuner + workload builder)
+    ├── AlgorithmCard.qml       per-algorithm ABOUT card on the algorithm picker
+    ├── AlgorithmTuner.qml      AARS weights screen, reached via [ TUNE ]
+    ├── CompareView.qml         EDRD §5.11 — two runs on the same processes, side by side (2026-10-22)
+    ├── Scoreboard.qml          the compare screen's metric table, revealed at the end
+    ├── VerdictPopup.qml        the compare screen's verdict popup: winner, scoreboard, per-side "better at" lists
+    ├── NeonScrollBar.qml       the one scrollbar: thin rail + draggable thumb on every scrolling region (2026-10-22)
+    ├── StatTile.qml            top-bar stat tile, shared by Dashboard and CompareView
+    ├── CustomWorkloadEditor.qml  the custom workload builder, inside WorkloadPicker
     ├── AsciiBar.qml            character-bar readout — the default quantity widget everywhere
     │                             else (scrub track, aging meters, score breakdown, load factor)
     ├── TerminalPane.qml        1px frame + ASCII title bar — base chrome for every panel
@@ -274,13 +303,15 @@ No web technology anywhere in `app/` — Qt Quick (QML) is a declarative UI fram
 `ChronosBridge::runSelectedSimulation()` calls `loadWorkload()` + `makeScheduler()` + `runSimulation()` from `chronos_core` directly (Section 3.6's C++ API, not the JSON file), storing the resulting `SimulationResult` in memory. Every other bridge method is a **pure function of `(m_result, tick)`**, ported 1:1 from the original web dashboard's `app.js` derivation helpers (`ticksRunUpTo`, `runningSegmentAt`, `lastDecisionAt`, `contextSwitchesUpTo`, `estimateAgingBonus`, the `processColor` palette cycle, and `buildProcessMeta`'s arrival/burst back-derivation from `processStats`) before that file was deleted — the underlying state-reconstruction-from-logs principle described in the old Section 5.2 above still holds, just implemented in C++ instead of JS:
 
 ```cpp
-QVariantList readyQueueAt(int tick) const;   // EDRD §5.3 rows, sorted per algorithm
-QVariantMap  whyPanelAt(int tick) const;     // EDRD §5.4 reasons + score breakdown
-QVariantList agingListAt(int tick) const;    // EDRD §5.5
+QVariantList readyQueueAt(int tick) const;   // EDRD §5.3 rows, in each algorithm's own pick order
+QVariantMap  whyPanelAt(int tick) const;     // EDRD §5.4 reasons + score breakdown (idle-aware)
+QVariantMap  agingAt(int tick) const;        // EDRD §5.5 — per-algorithm aging rule + entries
 QVariantList processTickerAt(int tick) const; // new — per-process completion progress
 int          cpuUtilizationAt(int tick) const;
 int          contextSwitchesAt(int tick) const;
 ```
+
+**Revised 2026-10-22:** these are now pure functions of a private `Run` (result + per-PID meta + the workload + AARS weights it ran with) rather than of loose members, so the bridge can hold the dashboard's run and the compare screen's two runs side by side. The `cmp*` methods (`runComparison`, `cmpGanttSegments(side)`, `cmpTickerRowAt`, `cmpDoneAt`, `cmpSwitchesAt`, the `comparison` property) are the same derivations over `m_cmp[0]`/`m_cmp[1]`. Three behaviours were fixed at the same time: idle ticks (a decision with `chosen == -1`) no longer count as context switches or show as "P-1" in the why-panel; the ready queue also lists processes that arrived after the last decision; and the aging panel applies the running algorithm's own aging rule instead of AARS's defaults for every algorithm.
 
 There is no separate "ready queue over time" array in `SimulationResult` — same deliberate simplification as before: state-at-a-tick is reconstructed from `gantt[]`/`decisionLog[]`/`processStats[]`, which is why the JSON schema (Section 4) didn't need to change for the GUI to exist.
 
@@ -306,7 +337,18 @@ Timer {
 ### 5.4 Screen flow (replaces the old "loading a result file" section)
 
 ```
-Splash (auto scroll-reveal, ~2.6s hold) → AlgorithmPicker → WorkloadPicker → Dashboard
+Splash (auto scroll-reveal, ~2.6s hold) → AlgorithmPicker → [AlgorithmTuner] → WorkloadPicker → Dashboard
+```
+
+**Compare branch (2026-10-22):** the algorithm picker's `[ COMPARE TWO ]` mode sets `bridge.compareMode` and an A and B key; the workload step is unchanged; RUN then calls `bridge.runComparison()` — one workload built once, run under both algorithms — and opens `CompareView` instead of `Dashboard`:
+
+```
+AlgorithmPicker (COMPARE TWO: pick A, B) → [AlgorithmTuner] → WorkloadPicker → CompareView
+```
+
+`AlgorithmTuner` appears only via AARS's `[ TUNE ]` (added 2026-10-16). Weights live on `ChronosBridge` (`m_aarsParams`, edited via `setAarsTuning`/`resetAarsTuning`) and reach the engine through `makeScheduler(key, workload, params)`; the run is named by `scheduler->name()`, so a tuned AARS is "AARS (tuned)" on the dashboard. A custom workload is a `WorkloadSpec` on the bridge (`customSpec`/`setGroupField`/…); `runSelectedSimulation()` calls `generateWorkload(spec)` instead of `loadWorkload(path)` when `useCustomWorkload` is set, and `customSummary` feeds the card through the same `WorkloadListModel::summarize()` the preset files use.
+
+```
 ```
 
 `WorkloadPicker` lists `workloads/*.json` via `WorkloadListModel` (a `QDir` scan, not a native OS file-explorer dialog — this was an explicit requirement). Pressing RUN calls `bridge.runSelectedSimulation()` synchronously (simulations complete in well under a frame for the workload sizes this project targets) and transitions into `Dashboard.qml`. There is no file-loading step visible to the user at all — contrast with the old dashboard, which required manually running the CLI and picking the output file.
@@ -314,6 +356,8 @@ Splash (auto scroll-reveal, ~2.6s hold) → AlgorithmPicker → WorkloadPicker �
 ---
 
 ## 6. Analysis internals (`analysis/analysis.py`)
+
+**Built 2026-10-22.** `analysis/analysis.py` (stdlib only; matplotlib optional for `--charts`) and `analysis/run_all.py` (runs every algorithm × workload through the CLI into `results/`). Views: the default all-algorithms table per workload, `--pair A B` (the GUI's head-to-head verdict, workload by workload), and `--versus A B C…` (where A beats *every* other listed algorithm, and where it loses to at least one). Writes `analysis/output/report.md`, `comparison.csv`, and with `--charts` four PNGs styled per EDRD §7.2. Metric definitions mirror `engine/comparison.cpp`; the two were cross-checked verdict by verdict (432/432 identical).
 
 ### 6.1 Responsibilities
 
@@ -343,7 +387,7 @@ The `decisionLog` (defined once, in Section 4.3) is deliberately reused for thre
 
 1. **The dashboard's why-panel** reads it live, per-tick, from the loaded JSON.
 2. **`logs/scheduler.log`** is a human-readable text rendering of the same entries, written by the engine alongside the JSON, for terminal debugging and for quoting from during a viva.
-3. **Regression testing** — the edge-case tests in `PRD.md` §10 can assert against specific `decisionLog` entries (e.g. "at tick 14, P1 should be chosen with reason tag `aging_bonus`") rather than only checking final summary stats, which makes test failures much easier to diagnose.
+3. **Regression testing** — built 2026-10-22 as `tests/run_tests.py` (see `PRD.md` §10). The edge-case tests in `PRD.md` §10 can assert against specific `decisionLog` entries (e.g. "at tick 14, P1 should be chosen with reason tag `aging_bonus`") rather than only checking final summary stats, which makes test failures much easier to diagnose.
 
 Building this once, correctly, in the engine (Section 3.5) pays for itself across all three uses — it is the single highest-leverage piece of infrastructure in the whole system, and worth getting right before moving past Milestone 1.
 
@@ -358,7 +402,7 @@ CMakeLists.txt   → chronos_core (static lib)
 analysis/         → run directly with `python3 analysis/analysis.py <files>`
 ```
 
-`chronos_app` only builds if Qt6 (Core/Gui/Qml/Quick) is found via `find_package` — if it's missing, CMake configure just skips that target with a message, the CLI still builds. The GUI links `chronos_core` at compile time (Section 5.2); the CLI and `analysis/` are only coupled via the JSON files in `results/` at runtime, same as before. See `CLAUDE.md` for exact commands, including the `CMAKE_PREFIX_PATH` Qt6 needs on this machine.
+`chronos_app` only builds if Qt6 (Core/Gui/Qml/Quick) is found via `find_package` — if it's missing, CMake configure just skips that target with a message, the CLI still builds. The GUI links `chronos_core` at compile time (Section 5.2); the CLI and `analysis/` are only coupled via the JSON files in `results/` at runtime, same as before. See `AGENTS.md` for exact commands, including the `CMAKE_PREFIX_PATH` Qt6 needs on this machine.
 
 ---
 
@@ -366,8 +410,8 @@ analysis/         → run directly with `python3 analysis/analysis.py <files>`
 
 | Future addition | Where it plugs in | What it must NOT touch |
 |---|---|---|
-| MLFQ (Milestone 3) | New `schedulers/mlfq.cpp` implementing the `Scheduler` interface (§3.2) | `simulator.cpp`, JSON schema |
-| Real pthreads (stretch, PRD §6.5) | A parallel `simulator_threaded.cpp`, separate binary target | The primary JSON-producing `simulator.cpp` path — must stay isolated so a threading bug can't break the main deliverable (per `CLAUDE.md`) |
+| ~~MLFQ (Milestone 3)~~ | **Done 2026-10-22**, with CFS — `schedulers/mlfq.cpp`, `schedulers/cfs.cpp`. Needed one additive interface hook (`shouldPreempt`, §3.2) and one additive JSON field (`processStats[].nice`) | — |
+| Real pthreads (stretch, PRD §6.5) | A parallel `simulator_threaded.cpp`, separate binary target | The primary JSON-producing `simulator.cpp` path — must stay isolated so a threading bug can't break the main deliverable (per `AGENTS.md`) |
 | ~~Local server for a live "Run" button~~ | Superseded — `chronos_app`'s in-process `ChronosBridge` link already does this natively, no server needed | — |
 | Fairness index (stretch, PRD §6.5) | New field in `summary` (§4.3), computed at end of `runSimulation` from existing `processStats` | Nothing — purely additive to the schema |
 | Large-scale benchmark mode (stretch) | New CLI flag / mode in `main.cpp` that generates a synthetic workload in-memory instead of reading one | `Scheduler` interface, JSON schema |

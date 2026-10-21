@@ -38,14 +38,31 @@ ApplicationWindow {
     }
     Component {
         id: algorithmPickerComponent
-        AlgorithmPicker { onChosen: stack.replace(workloadPickerComponent) }
+        AlgorithmPicker {
+            onChosen: stack.replace(workloadPickerComponent)
+            onTuneRequested: stack.replace(tunerComponent)
+        }
+    }
+    // Added 2026-10-16: tuning AARS happens between the algorithm and
+    // workload steps, only when asked for via [ TUNE ].
+    Component {
+        id: tunerComponent
+        AlgorithmTuner {
+            onContinueRequested: stack.replace(workloadPickerComponent)
+            onBackRequested: stack.replace(algorithmPickerComponent)
+        }
     }
     Component {
         id: workloadPickerComponent
         WorkloadPicker {
             onRunRequested: {
-                bridge.runSelectedSimulation();
-                stack.replace(dashboardComponent);
+                // Compare mode (2026-10-22) runs both chosen algorithms on the
+                // same processes and opens the side-by-side screen instead.
+                if (bridge.compareMode) {
+                    if (bridge.runComparison()) stack.replace(compareComponent);
+                } else if (bridge.runSelectedSimulation()) {
+                    stack.replace(dashboardComponent);
+                }
             }
             onBackRequested: stack.replace(algorithmPickerComponent)
         }
@@ -53,6 +70,12 @@ ApplicationWindow {
     Component {
         id: dashboardComponent
         Dashboard {
+            onRestartRequested: stack.replace(algorithmPickerComponent)
+        }
+    }
+    Component {
+        id: compareComponent
+        CompareView {
             onRestartRequested: stack.replace(algorithmPickerComponent)
         }
     }

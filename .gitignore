@@ -4,3 +4,5 @@ logs/
 build/
 analysis/output/
 .env
+__pycache__/
+*.pyc

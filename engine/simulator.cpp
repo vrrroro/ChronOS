@@ -1,8 +1,10 @@
 #include "simulator.h"
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <stdexcept>
 
 #include "behavior_analyzer.h"
 #include "json.hpp"
@@ -77,7 +79,9 @@ SimulationResult runSimulation(const Workload& workload, Scheduler& scheduler, c
 
     while (static_cast<int>(completed.size()) < totalProcesses) {
         // 1. Admit newly-arrived processes.
-        while (newIdx < newQueue.size() && newQueue[newIdx].arrivalTime == tick) {
+        // `<=` rather than `==`: identical for valid input, and a process with
+        // a negative arrival time is admitted at tick 0 instead of never.
+        while (newIdx < newQueue.size() && newQueue[newIdx].arrivalTime <= tick) {
             Process p = newQueue[newIdx];
             p.state = State::READY;
             readyQueue.push_back(p);
@@ -99,8 +103,13 @@ SimulationResult runSimulation(const Workload& workload, Scheduler& scheduler, c
             running.predictedClass = justRunning.front().predictedClass;
         }
 
-        // 4. Scheduling decision.
-        if (!hasRunning || quantumRemaining == 0) {
+        // 4. Scheduling decision. Besides an empty CPU or an expired slice,
+        //    a scheduler may end the slice early (MLFQ: a higher queue has
+        //    work; CFS: wakeup preemption). Schedulers that do not override
+        //    shouldPreempt() never get here mid-slice, exactly as before.
+        const bool preempt = hasRunning && quantumRemaining != 0 &&
+                             scheduler.shouldPreempt(running, readyQueue, tick);
+        if (!hasRunning || quantumRemaining == 0 || preempt) {
             if (hasRunning) {
                 // Don't record yet — the same process may win reselection
                 // immediately (quantum simply ran out with nothing better
@@ -225,7 +234,7 @@ SimulationResult runSimulation(const Workload& workload, Scheduler& scheduler, c
         result.processStats.push_back(ProcessStat{p.pid, p.waitingTime, p.turnaroundTime,
                                                   p.responseTime, p.completionTime,
                                                   p.arrivalTime, p.burstTime,
-                                                  p.contextSwitches, finalP.predictedClass});
+                                                  p.contextSwitches, finalP.predictedClass, p.nice});
         sumWaiting += p.waitingTime;
         sumTurnaround += p.turnaroundTime;
         sumResponse += p.responseTime;
@@ -242,7 +251,23 @@ SimulationResult runSimulation(const Workload& workload, Scheduler& scheduler, c
     return result;
 }
 
+namespace {
+
+// Opens a file for writing, creating its parent directories first: results/
+// and logs/ are gitignored, so a fresh clone has neither.
+std::ofstream openForWrite(const std::string& path, bool required) {
+    std::error_code ec;
+    const std::filesystem::path parent = std::filesystem::path(path).parent_path();
+    if (!parent.empty()) std::filesystem::create_directories(parent, ec);
+    std::ofstream out(path);
+    if (!out && required) throw std::runtime_error("could not open " + path + " for writing");
+    return out;
+}
+
+}  // namespace
+
 void writeResultJson(const SimulationResult& result, const std::string& outPath) {
+    std::ofstream out = openForWrite(outPath, /*required=*/true);
     json j;
     j["algorithm"] = result.algorithm;
     j["workloadName"] = result.workloadName;
@@ -270,7 +295,8 @@ void writeResultJson(const SimulationResult& result, const std::string& outPath)
                                       {"completionTime", p.completionTime},
                                       {"arrivalTime", p.arrivalTime}, {"burstTime", p.burstTime},
                                       {"contextSwitches", p.contextSwitches},
-                                      {"class", processClassToString(p.predictedClass)}});
+                                      {"class", processClassToString(p.predictedClass)},
+                                      {"nice", p.nice}});
     }
 
     j["summary"] = {
@@ -282,12 +308,15 @@ void writeResultJson(const SimulationResult& result, const std::string& outPath)
         {"throughput", result.summary.throughput},
     };
 
-    std::ofstream out(outPath);
     out << j.dump(2);
+    if (!out) throw std::runtime_error("could not write " + outPath);
 }
 
 void writeSchedulerLog(const SimulationResult& result, const std::string& logPath) {
-    std::ofstream out(logPath);
+    // The log is a convenience copy of decisionLog: if it cannot be written
+    // the run itself still succeeded, so this stays silent.
+    std::ofstream out = openForWrite(logPath, /*required=*/false);
+    if (!out) return;
     out << "ChronOS scheduler decision log\n";
     out << "algorithm: " << result.algorithm << "\n";
     out << "workload: " << result.workloadName << "\n";

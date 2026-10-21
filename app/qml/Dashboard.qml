@@ -66,7 +66,10 @@ Item {
 
                 Text {
                     text: "$ chronos --algorithm " + bridge.selectedAlgorithm
-                          + " --workload " + bridge.resultWorkloadName
+                          + (bridge.selectedAlgorithm === "aars" && bridge.aarsTuned ? " --tuned" : "")
+                          + " --workload " + (bridge.useCustomWorkload ? "custom:" : "")
+                          + bridge.resultWorkloadName
+                          + "   //   " + bridge.resultAlgorithmName
                     color: Theme.textDim
                     font.family: Theme.fontMono
                     font.pixelSize: Theme.sizeMicro
@@ -152,7 +155,8 @@ Item {
                     Layout.fillHeight: true
                     Layout.minimumHeight: 140
                     currentTick: root.currentTick
-                    onHovered: (entry, windowY) => root.showHud(entry, windowY)
+                    ticksPerSecond: root.ticksPerSecond
+                    onHovered: (index, windowY) => root.showHud(index, windowY)
                     onUnhovered: root.hideHud()
                 }
 
@@ -186,7 +190,8 @@ Item {
                     Layout.fillHeight: false
                     Layout.preferredHeight: 168
                     rows: bridge.readyQueueAt(root.currentTick)
-                    isAars: bridge.isAars
+                    scoreLabel: bridge.scoreColumnLabel
+                    priorityLabel: bridge.priorityColumnLabel
                 }
 
                 WhyPanel {
@@ -199,8 +204,8 @@ Item {
                 AgingIndicator {
                     Layout.fillWidth: true
                     Layout.fillHeight: false
-                    Layout.preferredHeight: 112
-                    entries: bridge.agingListAt(root.currentTick)
+                    Layout.preferredHeight: 136
+                    info: bridge.agingAt(root.currentTick)
                 }
             }
         }
@@ -209,8 +214,14 @@ Item {
     // Floating process HUD (§5.10). Hosted here rather than inside the ticker
     // so it can overhang the pane's edges — clipped to the ticker it would be
     // unusable on the first and last rows.
+    // Which ticker row the HUD describes (-1 = none). The entry is re-read
+    // from the bridge at the current tick, so the HUD follows playback.
+    property int hudIndex: -1
+
     ProcessHud {
         id: hud
+        algoKey: bridge.resultKey
+        entry: root.hudIndex >= 0 ? bridge.processTickerRowAt(root.currentTick, root.hudIndex) : ({})
         visible: opacity > 0
         opacity: 0
         z: 500
@@ -228,8 +239,8 @@ Item {
         Behavior on y { NumberAnimation { duration: Theme.durationBase; easing.type: Easing.OutCubic } }
     }
 
-    function showHud(entry, windowY) {
-        hud.entry = entry;
+    function showHud(index, windowY) {
+        root.hudIndex = index;
         hud.hudAnchorY = windowY;
         hud.opacity = 1;
     }
@@ -249,39 +260,6 @@ Item {
         case Qt.Key_Left: stepBack(); event.accepted = true; break;
         case Qt.Key_R: reset(); event.accepted = true; break;
         case Qt.Key_Escape: root.restartRequested(); event.accepted = true; break;
-        }
-    }
-
-    // Stat tile (§5.1). Width-reserved from a character count so a counting
-    // number never shifts the tiles beside it (§3.2).
-    component StatTile: ColumnLayout {
-        property string label: ""
-        property var value: ""
-        property int cells: 4
-        property color accent: Theme.textPrimary
-
-        Layout.fillWidth: false
-        spacing: 0
-
-        Text {
-            text: parent.label
-            color: Theme.textDim
-            font.family: Theme.fontMono
-            font.pixelSize: Theme.sizeMicro
-            font.weight: Theme.weightSemiBold
-            font.letterSpacing: Theme.trackMicro
-            horizontalAlignment: Text.AlignRight
-            Layout.preferredWidth: Theme.charWidth(Theme.sizeDataLg) * parent.cells
-        }
-
-        Text {
-            text: parent.value
-            color: parent.accent
-            font.family: Theme.fontMono
-            font.pixelSize: Theme.sizeDataLg
-            font.weight: Theme.weightExtraBold
-            horizontalAlignment: Text.AlignRight
-            Layout.preferredWidth: Theme.charWidth(Theme.sizeDataLg) * parent.cells
         }
     }
 }

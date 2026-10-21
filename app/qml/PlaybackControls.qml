@@ -21,6 +21,10 @@ TerminalPane {
 
     implicitHeight: 90
 
+    // Extra controls at the end of the scrub row — the compare screen puts its
+    // [ VERDICT ] button here (EDRD §5.11). Empty on the dashboard.
+    property alias scrubTrailing: scrubTrailingRow.data
+
     // Two rows rather than one: at the ~700px this column gets, a single strip
     // could not hold four transport buttons, four speed toggles, a scrub track
     // and a tick counter, and the layout silently squeezed the last speed
@@ -121,6 +125,13 @@ TerminalPane {
                 Layout.fillWidth: false
                 Layout.preferredWidth: Theme.charWidth(Theme.sizeData)
                                        * (String(root.maxTick).length * 2 + 4)
+            }
+
+            RowLayout {
+                id: scrubTrailingRow
+                visible: children.length > 0
+                Layout.fillWidth: false
+                spacing: Theme.spaceSm
             }
         }
     }

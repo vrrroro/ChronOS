@@ -43,6 +43,17 @@ public:
     // in the current process's slice, or -1 if not quantum-based.
     virtual int currentQuantum(const Process& running) const { return -1; }
 
+    // Called every tick while a process is running mid-slice (after new
+    // arrivals are admitted). Returning true ends the slice now: the running
+    // process goes back to readyQueue and selectNext() is called this tick.
+    // Added 2026-10-22 for MLFQ (a higher queue preempts a lower one) and CFS
+    // (wakeup preemption). Default false, so the original five schedulers —
+    // which never override it — behave byte-identically.
+    virtual bool shouldPreempt(const Process& running, const std::vector<Process>& readyQueue,
+                               int currentTick) {
+        return false;
+    }
+
     // For logging/dashboard: explain the selectNext decision just made.
     // Must be populated with real candidate scores + reason tags every
     // call — this feeds the dashboard's why-panel directly (EDRD.md §5.4).
@@ -61,8 +72,12 @@ public:
 //                                  RoundRobinScheduler(int quantum)
 //   schedulers/priority.h     class PriorityScheduler     : public Scheduler
 //   schedulers/aars.h         class AARSScheduler         : public Scheduler
+//                                  AARSScheduler(AarsParams, name) optional
+//   schedulers/mlfq.h         class MLFQScheduler         : public Scheduler
+//                                  MLFQScheduler(MlfqParams)
+//   schedulers/cfs.h          class CFSScheduler          : public Scheduler
+//                                  CFSScheduler(CfsParams)
 //
-// All five are default-constructible except RoundRobinScheduler, which
-// takes the workload's "quantum" field (PRD.md §5.2) as its one constructor
-// argument. None of them take any other constructor arguments.
+// Construct them through makeScheduler() (scheduler_factory.h), which resolves
+// each one's parameters from the workload.
 // --------------------------------------------------------------------------

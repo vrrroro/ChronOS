@@ -125,8 +125,9 @@ QtObject {
     // could be read; the speed multipliers exist for anyone who wants to skim.
     readonly property real baseTicksPerSecond: 0.6
 
-    // Progress-bar fill. Long and eased so the bar reads as liquid settling
-    // rather than as a value snapping to a new position (§6.9).
+    // Long eased move, used by the Gantt playhead (capped by the live tick
+    // interval there). The process-ticker bars no longer ease at all since
+    // 2026-10-16 — they tick segment by segment (TickBar.qml, §6.9).
     readonly property int durationFlow: 900
 
     // --- Derived helpers --------------------------------------------------

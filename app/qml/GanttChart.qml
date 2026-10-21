@@ -18,6 +18,10 @@ TerminalPane {
     // and further behind the real tick as speed goes up (see the Behavior
     // below).
     property real ticksPerSecond: Theme.baseTicksPerSecond
+    // The run to draw. The dashboard's single run by default; the compare
+    // screen passes each side's segments and a shared maxTick, so both
+    // timelines sit on the same time axis.
+    property var segments: bridge.ganttSegments()
 
     title: "CPU TIMELINE"
     active: true
@@ -46,7 +50,7 @@ TerminalPane {
             readonly property int rulerH: root.labelSize + Theme.spaceXs
 
             Repeater {
-                model: bridge.ganttSegments()
+                model: root.segments
 
                 delegate: Item {
                     id: seg
@@ -68,9 +72,15 @@ TerminalPane {
                     // label is drawn only by the last segment, because every
                     // other segment's end is the next one's start and drawing
                     // both would double every number on the axis.
+                    // A label is drawn only when it fits inside its own
+                    // segment, so neighbouring numbers can never run into
+                    // each other ("15178"). The hairline below still marks
+                    // every boundary, labelled or not.
                     Text {
+                        id: startLabel
                         x: 0
                         y: -canvas.rulerH
+                        visible: implicitWidth + Theme.spaceXs <= seg.width
                         text: seg.modelData.start
                         color: seg.isCurrent || seg.isPast ? seg.hue : Theme.textDim
                         font.family: Theme.fontMono
@@ -79,7 +89,10 @@ TerminalPane {
                     }
 
                     Text {
-                        visible: seg.index === bridge.ganttSegments().length - 1
+                        visible: seg.index === root.segments.length - 1
+                                 && implicitWidth + Theme.spaceXs
+                                    + (startLabel.visible ? startLabel.implicitWidth + Theme.spaceXs : 0)
+                                    <= seg.width
                         x: seg.width - implicitWidth
                         y: -canvas.rulerH
                         text: seg.modelData.end

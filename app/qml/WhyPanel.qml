@@ -27,21 +27,23 @@ TerminalPane {
         if (!p || typeof p !== "object") return emptyShape;
         return {
             hasDecision: p.hasDecision === true,
+            idle: p.idle === true,
             pid: p.pid !== undefined ? p.pid : -1,
-            score: p.score !== undefined ? p.score : 0,
+            status: p.status !== undefined ? p.status : "",
             reasons: p.reasons !== undefined ? p.reasons : [],
             scoreSegments: p.scoreSegments !== undefined ? p.scoreSegments : []
         };
     }
     readonly property var emptyShape: ({
-        hasDecision: false, pid: -1, score: 0, reasons: [], scoreSegments: []
+        hasDecision: false, idle: false, pid: -1, status: "", reasons: [], scoreSegments: []
     })
 
     title: "WHY THIS PROCESS"
     active: d.hasDecision
-    statusText: d.hasDecision
-                ? "DECISION SCORE " + Number(d.score).toFixed(1)
-                : "AWAITING FIRST DECISION"
+    // The status line is the algorithm's own decision quantity — AARS's
+    // score, MLFQ's queue, CFS's vruntime — worded by the bridge.
+    statusText: d.hasDecision ? d.status
+                              : (d.idle ? "CPU IDLE" : "AWAITING FIRST DECISION")
 
     ColumnLayout {
         anchors.fill: parent
@@ -53,7 +55,10 @@ TerminalPane {
             Layout.fillWidth: true
             spacing: Theme.spaceXs
             Text {
-                text: "> awaiting first scheduling decision"
+                // Idle: the scheduler was asked and nothing had arrived yet,
+                // or everything that had arrived has finished.
+                text: root.d.idle ? "> cpu idle — no process ready"
+                                  : "> awaiting first scheduling decision"
                 color: Theme.textDim
                 font.family: Theme.fontMono
                 font.pixelSize: Theme.sizeBody
@@ -93,13 +98,16 @@ TerminalPane {
             // renders, which looks like the data is missing rather than the
             // space. Same failure family as issue #15.
             Layout.minimumHeight: 96
+            id: reasonList
             clip: true
             spacing: Theme.spaceXs
             model: root.d.reasons
 
+            NeonScrollBar { id: reasonBar; flickable: reasonList }
+
             delegate: RowLayout {
                 required property var modelData
-                width: ListView.view.width
+                width: ListView.view.width - reasonBar.gutter
                 spacing: Theme.spaceSm
 
                 Text {
@@ -139,9 +147,10 @@ TerminalPane {
             }
         }
 
-        // Score breakdown (§7.1) -------------------------------------------
+        // Score breakdown (§7.1) — AARS only; nothing else has an additive
+        // score to break down, so neither the rule nor the bar is drawn.
         Text {
-            visible: root.d.hasDecision
+            visible: root.d.hasDecision && root.d.scoreSegments.length > 0
             Layout.fillWidth: true
             text: "-".repeat(Math.max(8, Math.floor(root.width / Theme.charWidth(Theme.sizeMicro)) - 4))
             color: Theme.borderMuted

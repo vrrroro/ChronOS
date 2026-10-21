@@ -8,6 +8,82 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Add ent
 
 ## [Unreleased]
 
+### Test suite, bug fixes, scrollbars (2026-10-22, explicit user request)
+
+**Tests** — `tests/run_tests.py` (issue #7): PRD §10's ten edge cases against all seven algorithms with full invariant checks on every run (consistent per-process stats, a well-formed Gantt chart, no idle CPU while work is ready, summary agrees with stats, decisions pick logged candidates, deterministic output), plus hand-worked schedules, tie-breaking, input validation, CLI argument errors and the C++/Python comparison cross-check. 34/34 pass. The 56-run matrix is byte-identical to before these fixes.
+
+**Fixed (found by the suite)**
+- A workload with `"pid": -1` hung the engine forever: −1 is the simulator's "no process" sentinel. Negative PIDs are now rejected.
+- `--out` into a directory that did not exist printed "wrote …" and wrote nothing — which is what the README's own command did on a fresh clone, since `results/` is gitignored. Parent directories are now created, and an unwritable path is an error. `logs/` likewise.
+- `chronos --compare aars,aars` was accepted.
+- The loader now rejects an empty or missing `processes` list, `priority` outside 1..10, negative `mlfq`/`cfs` block values (previously treated as "derive" without a word), and non-integer fields — naming the process — and reports JSON syntax errors as `parse error in <file>`.
+- `chronos.exe` died at load with 0xC0000139 when run from a shell whose PATH found Git for Windows' older `libstdc++-6.dll` first. The CLI now links the MinGW runtime statically and runs from any shell.
+
+**GUI**
+- `NeonScrollBar.qml` on every scrolling region (EDRD §5.10a): a thin faint-green rail with a bright green thumb — drag it, click the rail to jump, or wheel. Hidden when nothing overflows; content leaves a gutter for it.
+- Verdict popup: a metric name no longer wraps across lines ("worst / waiting").
+
+### Compare screen layout (2026-10-22, explicit user request)
+
+The right-hand column sat static until the run ended, and the ticker's `@<tick>` readouts did not read as anything.
+
+- The right column is now two why-panels, `A // WHY <NAME>` and `B // WHY <NAME>`, each explaining its own side's latest decision every tick: the dashboard's `WhyPanel`, fed by the new `bridge.cmpWhyPanelAt(side, tick)`. `whyPanelAt` and `cmpWhyPanelAt` share one derivation (`whyPanelOf(run, tick)`).
+- The verdict moved into a popup (`VerdictPopup.qml`, replacing `VerdictPanel.qml`). It opens from `[ VERDICT ]` at the end of the scrub row, which reads `[ >>| END ]` until both runs finish and then lights in inverted video. The popup shows the winner, the scoreboard and what each side is better at. `[ _ MINIMIZE ]`, Esc, or a click outside shrinks it back into the button; `V` toggles it. It closes if the playhead leaves the end.
+- `PlaybackControls` gained a `scrubTrailing` slot for that button; the dashboard leaves it empty.
+- The dual ticker now reads `[DONE]` like the dashboard's ticker, instead of `@<finish tick>` and a bold "finished first" emphasis.
+- `Scoreboard` no longer has a hidden/pending state: it lives in the popup, sizes itself to its rows, and replays its staggered reveal each time the popup opens.
+
+### MLFQ (Windows), CFS (Linux), compare mode, and analysis (2026-10-22)
+
+All at explicit user request: add textbook MLFQ and one of CFS/EEVDF, in their own picker section labelled "(Windows)" and "(Linux)"; give processes what those algorithms need; build an analysis that compares two algorithms on the same processes and says which is better on each metric; compare AARS against both. CFS was chosen over EEVDF because EEVDF's advantage is wake-up latency and nothing in this simulator sleeps (PRD §6.7).
+
+**Engine (`chronos_core`)**
+- `schedulers/mlfq.*` — textbook MLFQ (OSTEP rules 1–5): preemptive across queues, allotment accounting that survives preemption, demotion, periodic boost. Defaults `q/2q/4q`, boost `10q` (PRD §6.6).
+- `schedulers/cfs.*` — vruntime with Linux's `sched_prio_to_weight` table, `std::set` timeline (a red-black tree), `sched_slice`-style weighted slices, `min_vruntime` placement, wakeup preemption; Linux's ratios anchored to the workload quantum, no `START_DEBIT` handicap (PRD §6.7).
+- `Scheduler::shouldPreempt()` — default false; the tick loop asks it mid-slice. The five original schedulers are byte-identical (all 40 runs diffed against a pre-change baseline, ignoring only the new field below).
+- `Process::nice` (derived from priority when a workload omits it), `processStats[].nice` in the result JSON (additive), optional `"mlfq"`/`"cfs"` workload blocks.
+- `comparison.*` — nine metrics (PRD §8.3), winner per metric, tally. `chronos --compare a,b --workload <w> [--out <dir>]`.
+- `loadWorkload` now rejects `burstTime < 1` (previously an infinite loop), negative arrivals, out-of-range nice and duplicate PIDs; argument errors in the CLI are caught instead of terminating.
+- Verified by hand against worked examples: MLFQ preemption with remaining allotment, demotion and boost; CFS weighted slices (`nice -10` → weight 9548 → 14-of-16 slice) and wakeup preemption.
+
+**GUI**
+- Algorithm picker: `+--- REAL-WORLD OS SCHEDULERS` section with rows 6/7; ABOUT cards for both; `[ RUN ONE ] [ COMPARE TWO ]` (Tab), A/B selection with inverted badges, `[ AARS vs MLFQ ]` / `[ AARS vs CFS ]` shortcuts.
+- New `CompareView` (EDRD §5.11): two time-aligned Gantt timelines, dual process ticker, shared playback, scoreboard revealed at the end, verdict with per-side "better at" lists. New `Scoreboard.qml`, `VerdictPanel.qml` (later replaced by `VerdictPopup.qml`, see above); `StatTile.qml` extracted from `Dashboard.qml`.
+- Per-algorithm panels: ready-queue order and score column (`SCORE` / `QUEUE` / `VRUN`, `NICE` under CFS), aging rule (AARS tuned/untuned, Priority, MLFQ boost, none), why-panel reasons and status for every algorithm.
+- Workload card shows how MLFQ and CFS will slice the workload; ↑/↓ select presets; run errors are shown.
+
+**Fixed**
+- Idle ticks (decision with `chosen == -1`) showed as "P-1 RUNS NEXT" and counted as two context switches in the GUI (engine counted correctly). Reproduced with a two-process gap workload.
+- The process HUD showed the moment the hover began, not the current tick, under a stationary pointer; and showed a process's final class before it had run.
+- Gantt boundary labels on narrow segments ran together (`15178`, `1007`).
+- The ready queue omitted processes that arrived after the last decision (visible under FCFS/SJF/Priority for many ticks), and sorted non-AARS runs by base priority rather than each algorithm's own order.
+- The aging panel applied AARS's default formula to every algorithm, including a tuned AARS.
+- `TickBar` flash used `#FFFFFF`, outside the closed palette.
+- `ChronosBridge` still carried the pre-2026-08-24b green-shade table (unused by QML, now matches `Theme.procShades`).
+- PRD §6.3 said `kLowResponseTicks` is 2; the code is 3 (doc corrected, code unchanged).
+
+**Analysis**
+- `analysis/run_all.py` (56 runs) and `analysis/analysis.py` (stdlib; `--pair`, `--versus`, `--charts` with matplotlib). Writes `analysis/output/report.md`, `comparison.csv`, PNGs. Cross-checked against `chronos --compare`: 432/432 verdicts identical. Charts rendered and inspected in a throwaway venv (matplotlib is not installed globally here).
+
+**Results (untuned AARS, default MLFQ/CFS):** AARS beats both on avg waiting, avg turnaround and context switches on Mixed, Long-Tail and Clustered Arrivals, and on avg response + fairness on CPU-Heavy; it loses to MLFQ on every metric on Starvation and on all but context switches on Tiny Batch, and to MLFQ on avg response on most loads (no arrival preemption — #5). Nothing was tuned to produce these.
+
+### AARS tuning, custom workloads, algorithm ABOUT cards, ticking progress bars (2026-10-16)
+
+All at explicit user request. A sixth "Custom" algorithm (AARS's scorer plus SJF/FCFS-style terms and a quantum-mode choice) was built in the same pass and then **removed at explicit user request** in favour of tuning AARS alone; nothing of it remains.
+
+**Engine (`chronos_core`)**
+- `AarsParams` (`schedulers/aars.h`): every AARS weight and quantum as a struct whose defaults are PRD §6.2/§6.4; `AARSScheduler(params, name)`. Tunable: the five §6.1 weights and four §6.4 class quanta — the decision log's tags are unchanged.
+- `makeScheduler(key, workload, params)` overload. A non-default AARS is named "AARS (tuned)".
+- `workload_gen.h/.cpp`: `generateWorkload(WorkloadSpec)` — groups of CPU-BOUND / BALANCED / INTERACTIVE processes with per-group burst & priority ranges, three arrival patterns, seeded and deterministic (own integer mapping over `mt19937`, no implementation-defined distributions).
+- Verified: CLI output for all 40 runs (8 workloads × 5 algorithms) is byte-identical to the pre-change baseline; generated workloads run to completion under all five algorithms.
+
+**GUI**
+- Algorithm picker: list-plus-card layout with an **ABOUT** card (characteristics, strengths, weaknesses) per algorithm; `[ TUNE ]` on the AARS row; ↑/↓ browse, Enter pick, T tune AARS.
+- New **AARS tuner** screen (`AlgorithmTuner.qml`): every weight and class quantum as a stepper, live formula, reset to PRD defaults, `[TUNED]` warning for a modified AARS.
+- Workload picker: `[ PRESETS ] [ + CUSTOM ]` (Tab toggles). `CustomWorkloadEditor.qml` builds the workload; the right-hand `WorkloadCard` redraws live from the generated processes (stats, composition, burst skyline). `WorkloadListModel::summarize()` factored out so presets and custom workloads share the stat arithmetic.
+- Process ticker: `TickBar.qml` replaces `FluidBar.qml` — segments light one by one at a steady, speed-scaled cadence with a bright flashing leading segment; no easing, no sheen; rewinds snap.
+- New primitive `TerminalStepper.qml`. Ready queue still shows/sorts by score for a tuned AARS (`isAars` no longer string-compares the result name). Dashboard command line shows `--tuned` / `custom:` and the run's real algorithm name.
+
 ### Process ticker: fix delegate churn killing the segment fill animation (2026-08-25)
 
 Reported directly against the previous entry's segmented `FluidBar` work: "the
@@ -270,7 +346,7 @@ stderr.
   substantial piece before the project is demo-complete.
 - **`PRD.md` §5.3 does not yet document the four new `processStats` fields.**
 - `ARCHITECTURE.md`, `PRD.md`, `README.md` and `PROJECT_STATUS.md` were **not**
-  updated for this revision (`CLAUDE.md` and this file were). `EDRD.md` **was**
+  updated for this revision (`AGENTS.md` and this file were). `EDRD.md` **was**
   fully updated.
 - Nothing is committed: `app/`, the six newer workload presets,
   `engine/scheduler_factory.*` and `engine/workload_io.*` are all still
@@ -427,10 +503,10 @@ Done outside the formal milestone sequence on explicit request, before the archi
 
 ---
 
-## [0.2.1] — 2026-08-22 — Operating rules for Claude Code
+## [0.2.1] — 2026-08-22 — Operating rules for AI-assisted development
 
 ### Added
-- `CLAUDE.md`: terse operating instructions for AI-assisted implementation — locked stack (C++17/STL only, CMake, plain HTML/CSS/JS, no frameworks, no live backend), architecture/JSON-contract rules, algorithm build order, explicit "what NOT to do" list (no real threads unless asked, no ML classification, no responsive/mobile design, no hardcoded example metrics, no MLFQ before Milestones 0–2), testing requirements, and starter build/run commands.
+- `AGENTS.md`: terse operating instructions for AI-assisted implementation — locked stack (C++17/STL only, CMake, plain HTML/CSS/JS, no frameworks, no live backend), architecture/JSON-contract rules, algorithm build order, explicit "what NOT to do" list (no real threads unless asked, no ML classification, no responsive/mobile design, no hardcoded example metrics, no MLFQ before Milestones 0–2), testing requirements, and starter build/run commands.
 
 ### Notes
 - Commands section flagged as unverified placeholders pending real `main.cpp` CLI argument parsing.
@@ -470,7 +546,7 @@ Done outside the formal milestone sequence on explicit request, before the archi
   - AARS algorithm held to an "honest results" standard — not required to beat other algorithms overall, only to win on some metric under some workload, with losses reported and explained rather than tuned away.
 - Full goals/non-goals list, system architecture (three file-boundary-connected subsystems), data model (`Process` struct, workload JSON schema, result JSON schema), the AARS scoring formula (`Score = Base Priority + Aging Bonus + I/O Bonus + Response Bonus − CPU Burst Penalty`) with starting-point weights and rule-based behavior-classification thresholds, dashboard functional spec, metrics/comparison spec, a week-by-week milestone plan (Setup → MVP → Comparison & polish → MLFQ + depth → Stretch/presentation), a 10-case edge-case test matrix, logging spec, presentation outline, and a risks/mitigations table.
 - Every placeholder numeric value (weights, thresholds, timeframes) marked with an "✎ EDIT ME" note distinguishing starting guesses from fixed requirements.
-- Delivered first as a formatted `.docx` (via the docx skill), then re-authored as clean Markdown (`ChronosOS_PRD.md`) for repo/Claude Code use, since the original pandoc conversion lost code-block formatting.
+- Delivered first as a formatted `.docx` (via the docx skill), then re-authored as clean Markdown (`ChronosOS_PRD.md`) for repo/AI-assisted-development use, since the original pandoc conversion lost code-block formatting.
 
 ### Fixed
 - Docx generation bug: C++/JSON code samples initially collapsed onto single lines (violated the docx skill's "never use `\n` in one run" rule) — fixed by introducing a `codeBlock()` helper that splits multi-line text into separate paragraph elements, then re-verified by rendering to PDF and visually inspecting the affected pages.

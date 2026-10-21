@@ -28,6 +28,11 @@ struct Process {
     int startTime = -1;
     int completionTime = -1;
     int contextSwitches = 0;
+    // Unix-style niceness (-20 .. 19, lower = more CPU), read only by CFS for
+    // its load weight. Added 2026-10-22 (PRD.md §5.1). Workloads may set it
+    // per process; otherwise it is derived from basePriority by
+    // niceFromPriority(), so every existing workload runs under CFS unchanged.
+    int nice = 0;
 
     State state = State::NEW;
 
@@ -36,6 +41,11 @@ struct Process {
     int ioEvents = 0;                // count of times it voluntarily gave up CPU early
     ProcessClass predictedClass = ProcessClass::UNKNOWN;
 };
+
+// basePriority 1..10 (10 = most important) onto nice: 5 -> 0, two nice steps
+// per priority level, so 10 -> -10 and 1 -> +8. Each nice step is ~1.25x CPU
+// share under CFS, so one priority level is ~1.56x.
+int niceFromPriority(int priority);
 
 std::string stateToString(State s);
 std::string processClassToString(ProcessClass c);

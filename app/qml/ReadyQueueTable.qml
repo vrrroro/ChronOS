@@ -4,11 +4,19 @@ import ChronOS
 
 // EDRD.md §5.3 — the ready queue. Columns are sized in *characters* (§3.2)
 // rather than pixels, so values never shift their neighbours as digits change.
-// The SCORE column appears only for AARS runs.
+//
+// Rows arrive in the running algorithm's own pick order, so the top row is
+// who it would run next. The fifth column is whatever that algorithm decides
+// on — AARS's score, MLFQ's queue, CFS's vruntime — and is absent for the
+// four classic algorithms, which have nothing comparable to show. Under CFS
+// the priority column shows nice instead, since that is what CFS weighs.
 TerminalPane {
     id: root
     property var rows: []
-    property bool isAars: false
+    property string scoreLabel: ""
+    property string priorityLabel: "PRI"
+
+    readonly property bool showScore: scoreLabel.length > 0
 
     title: "READY QUEUE"
 
@@ -21,13 +29,16 @@ TerminalPane {
         // Column headers ---------------------------------------------------
         RowLayout {
             Layout.fillWidth: true
+            // Keeps the header over its columns when the rows below make room
+            // for the scrollbar.
+            Layout.rightMargin: queueBar.gutter
             spacing: Theme.spaceSm
 
             HeaderCell { text: "PID"; cells: 4 }
-            HeaderCell { text: "PRI"; cells: 4 }
+            HeaderCell { text: root.priorityLabel; cells: 4 }
             HeaderCell { text: "REM"; cells: 4 }
             HeaderCell { text: "WAIT"; cells: 5 }
-            HeaderCell { text: "SCORE"; cells: 6; visible: root.isAars }
+            HeaderCell { text: root.scoreLabel; cells: 7; visible: root.showScore }
             Text {
                 text: "CLASS"
                 color: Theme.textDim
@@ -65,16 +76,19 @@ TerminalPane {
         }
 
         ListView {
+            id: queueList
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
             model: root.rows
             spacing: 0
 
+            NeonScrollBar { id: queueBar; flickable: queueList }
+
             delegate: Rectangle {
                 id: rowItem
                 required property var modelData
-                width: ListView.view.width
+                width: ListView.view.width - queueBar.gutter
                 height: Theme.sizeData + Theme.spaceSm
                 color: modelData.isRunning ? Theme.bgPanelRaised : "transparent"
                 radius: Theme.radiusNone
@@ -92,16 +106,18 @@ TerminalPane {
                         // rather than by counting positions.
                         overrideColor: Theme.procShade(rowItem.modelData.pid)
                     }
-                    DataCell { text: rowItem.modelData.priority; cells: 4 }
+                    DataCell { text: rowItem.modelData.priText; cells: 4 }
                     DataCell { text: rowItem.modelData.burstRemaining; cells: 4 }
                     DataCell { text: rowItem.modelData.wait; cells: 5 }
                     DataCell {
-                        text: Number(rowItem.modelData.score).toFixed(1)
-                        cells: 6
-                        visible: root.isAars
+                        text: rowItem.modelData.scoreText
+                        cells: 7
+                        visible: root.showScore
                         // The number the scheduler actually decides on. Cyan
-                        // ties it to the why-panel, which explains it.
-                        overrideColor: Theme.accentCyan
+                        // ties it to the why-panel, which explains it. A
+                        // process that arrived since the last decision has
+                        // not been scored yet and reads "—" in dim.
+                        overrideColor: rowItem.modelData.scored ? Theme.accentCyan : Theme.textDim
                     }
 
                     Text {

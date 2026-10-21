@@ -16,6 +16,9 @@ Rectangle {
     id: root
 
     property var entry: ({})
+    // The run's algorithm key — under CFS the HUD also shows the nice value
+    // and load weight that set this process's share of the CPU.
+    property string algoKey: ""
     readonly property color hue: entry.pid !== undefined
                                  ? Theme.procShade(entry.pid) : Theme.textPrimary
 
@@ -139,6 +142,12 @@ Rectangle {
             elide: Text.ElideRight
         }
 
+        HudRow { label: "PRIORITY"; value: root.entry.priority + "" }
+        HudRow {
+            visible: root.algoKey === "cfs"
+            label: "NICE / WEIGHT"
+            value: root.entry.nice + " / " + root.entry.weight
+        }
         HudRow { label: "CPU DONE"; value: root.entry.ranSoFar + " / " + root.entry.burstTime + " ticks" }
         HudRow { label: "ARRIVED";  value: "tick " + root.entry.arrivalTime }
         HudRow {

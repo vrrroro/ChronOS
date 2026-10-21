@@ -4,12 +4,18 @@
 #include <vector>
 #include "process.h"
 #include "schedulers/scheduler_base.h"
+#include "schedulers/mlfq.h"
+#include "schedulers/cfs.h"
 
 // PRD.md §5.2 — engine input.
 struct Workload {
     std::string name;
     int quantum = 0;
     std::vector<Process> processes;
+    // Optional "mlfq" / "cfs" blocks (added 2026-10-22). Zero fields mean
+    // "derive from quantum", so a workload without them still runs both.
+    MlfqConfig mlfq;
+    CfsConfig cfs;
 };
 
 // PRD.md §5.3 — the pieces of the result JSON built by the tick loop.
@@ -33,6 +39,8 @@ struct ProcessStat {
     int burstTime = 0;
     int contextSwitches = 0;
     ProcessClass predictedClass = ProcessClass::UNKNOWN;
+    // Added 2026-10-22 (additive): the niceness CFS weighted this process by.
+    int nice = 0;
 };
 
 struct Summary {

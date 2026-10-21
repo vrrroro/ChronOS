@@ -1,5 +1,11 @@
 #include "process.h"
 
+#include <algorithm>
+
+int niceFromPriority(int priority) {
+    return std::clamp((5 - priority) * 2, -20, 19);
+}
+
 std::string stateToString(State s) {
     switch (s) {
         case State::NEW: return "NEW";

@@ -3,6 +3,9 @@
 #include <QAbstractListModel>
 #include <QVector>
 #include <QString>
+#include <QVariantMap>
+
+#include "simulator.h"
 
 // Backs the in-app workload file browser (WorkloadPicker.qml) — lists the
 // *.json files under the workloads directory so the GUI never needs to open
@@ -10,7 +13,7 @@
 //
 // Beyond the bare file listing, each entry carries the statistics the picker's
 // hover card shows. Every one of those numbers is *computed from the file*
-// (PRD §5.2 shape) rather than authored alongside it — CLAUDE.md forbids
+// (PRD §5.2 shape) rather than authored alongside it — AGENTS.md forbids
 // hardcoded illustrative metrics, and a stat that can drift out of sync with
 // the workload it describes is exactly that. The only authored field is the
 // optional `description` string, which is editorial prose about what kind of
@@ -33,6 +36,7 @@ public:
         PriorityMinRole,
         PriorityMaxRole,
         LoadFactorRole,    // totalBurst / arrivalSpan, one decimal, as a string
+        SchedulerNoteRole, // how MLFQ / CFS will slice it (schedulerNote())
     };
 
     explicit WorkloadListModel(QObject* parent = nullptr);
@@ -42,6 +46,22 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     Q_INVOKABLE void refresh();
+
+    // One process as the stats below need it — shared with the custom
+    // workload builder (ChronosBridge::customSummary), so a generated workload
+    // is described by exactly the same arithmetic as a preset file.
+    struct ProcSpec {
+        int arrival = 0;
+        int burst = 0;
+        int priority = 5;
+    };
+    // The card's stat fields (same names as this model's roles) for a process list.
+    static QVariantMap summarize(const QVector<ProcSpec>& procs, int quantum);
+
+    // One line describing how MLFQ and CFS will slice this workload, from the
+    // engine's own resolveMlfq()/resolveCfs() — e.g. "MLFQ 4/8/16 boost 40 ·
+    // CFS slice >=4". Shared with the custom builder's card.
+    static QString schedulerNote(const Workload& w);
 
 private:
     struct Entry {
@@ -59,6 +79,8 @@ private:
         int priorityMax = 0;
         double avgBurst = 0.0;
         double loadFactor = 0.0;
+        QString schedulerNote;
     };
+    static void computeStats(Entry& e, const QVector<ProcSpec>& procs);
     QVector<Entry> m_entries;
 };

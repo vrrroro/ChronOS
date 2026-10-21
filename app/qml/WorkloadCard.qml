@@ -6,7 +6,7 @@ import ChronOS
 // puts on the scheduler before you commit to running it.
 //
 // Every number here is computed from the workload file by WorkloadListModel
-// (see its header comment): CLAUDE.md forbids hardcoded illustrative metrics,
+// (see its header comment): AGENTS.md forbids hardcoded illustrative metrics,
 // and a stat authored next to the data it describes is exactly that. The only
 // authored string is `description`, which is editorial prose about the shape of
 // the load, not a measurement.
@@ -30,9 +30,19 @@ TerminalPane {
     property int priorityMin: 0
     property int priorityMax: 0
     property string loadFactor: "0.0"
+    // How MLFQ and CFS will slice this workload, resolved by the engine
+    // (WorkloadListModel::schedulerNote) — the per-workload facts those two
+    // algorithms need beyond the processes themselves.
+    property string schedulerNote: ""
+    // Custom workloads only (2026-10-16): what the builder generated. Empty
+    // for presets, and both sections below hide themselves when empty.
+    property var composition: []
+    property var processes: []
+    property string statusOverride: ""
 
     title: workloadName.toUpperCase()
-    statusText: "--workload " + workloadName.toLowerCase().replace(/ /g, "_")
+    statusText: statusOverride.length > 0 ? statusOverride
+                                          : "--workload " + workloadName.toLowerCase().replace(/ /g, "_")
     active: true
 
     implicitWidth: 380
@@ -101,6 +111,99 @@ TerminalPane {
             elide: Text.ElideRight
         }
 
+        // Composition (custom workloads) -----------------------------------
+        // How many of each kind the builder made. Kind is categorical, like
+        // the CLASS badge (EDRD §2.5 exemption), and always spelled out.
+        ColumnLayout {
+            visible: root.composition.length > 0
+            Layout.fillWidth: true
+            spacing: Theme.spaceXs
+
+            Repeater {
+                model: root.composition
+                delegate: RowLayout {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    spacing: Theme.spaceSm
+                    Text {
+                        text: modelData.kind
+                        color: Theme.textSecondary
+                        font.family: Theme.fontMono
+                        font.pixelSize: Theme.sizeMicro
+                        font.letterSpacing: Theme.trackMicro
+                        Layout.preferredWidth: Theme.charWidth(Theme.sizeMicro) * 13
+                    }
+                    AsciiBar {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Theme.sizeMicro + 2
+                        fraction: root.processCount > 0 ? modelData.count / root.processCount : 0
+                        glyph: "|"
+                        pixelSize: Theme.sizeMicro
+                    }
+                    Text {
+                        text: modelData.count
+                        color: Theme.textPrimary
+                        font.family: Theme.fontMono
+                        font.pixelSize: Theme.sizeMicro
+                        font.weight: Theme.weightBold
+                        horizontalAlignment: Text.AlignRight
+                        Layout.preferredWidth: Theme.charWidth(Theme.sizeMicro) * 3
+                    }
+                }
+            }
+        }
+
+        // The generated processes as a skyline: one column per process, in
+        // PID (= arrival) order, height proportional to its burst, in the hue
+        // it will wear on the dashboard (§2.3) — so the run that follows is
+        // recognisable before it starts.
+        ColumnLayout {
+            visible: root.processes.length > 0
+            Layout.fillWidth: true
+            spacing: 2
+
+            Item {
+                id: skyline
+                Layout.fillWidth: true
+                Layout.preferredHeight: 36
+                readonly property real colW: root.processes.length > 0
+                                             ? width / root.processes.length : 0
+
+                Repeater {
+                    model: root.processes
+                    delegate: Rectangle {
+                        required property var modelData
+                        required property int index
+                        x: index * skyline.colW
+                        width: Math.max(1, skyline.colW - (skyline.colW > 4 ? 2 : 0))
+                        height: Math.max(2, skyline.height * modelData.burst / Math.max(1, root.maxBurst))
+                        anchors.bottom: parent.bottom
+                        color: Theme.procShade(modelData.pid)
+                        radius: Theme.radiusNone
+                    }
+                }
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: "P1 → P" + root.processes.length + "  //  height = burst  //  color = dashboard identity"
+                color: Theme.textDim
+                font.family: Theme.fontMono
+                font.pixelSize: Theme.sizeMicro
+                elide: Text.ElideRight
+            }
+        }
+
+        Text {
+            visible: root.processes.length > 0
+            Layout.fillWidth: true
+            text: "=".repeat(Math.max(8, Math.floor(root.width / Theme.charWidth(Theme.sizeMicro)) - 4))
+            color: Theme.borderMuted
+            font.family: Theme.fontMono
+            font.pixelSize: Theme.sizeMicro
+            elide: Text.ElideRight
+        }
+
         // Burst distribution ----------------------------------------------
         ColumnLayout {
             Layout.fillWidth: true
@@ -115,7 +218,11 @@ TerminalPane {
                                               : "tick 0 – " + root.arrivalSpan
             }
             StatLine { label: "PRIORITY"; value: root.priorityMin + " – " + root.priorityMax }
-            StatLine { label: "QUANTUM"; value: root.quantum + " ticks  (RR only)" }
+            StatLine {
+                label: "SLICING"
+                value: "RR " + root.quantum
+                       + (root.schedulerNote.length > 0 ? " · " + root.schedulerNote : "")
+            }
         }
 
         Text {
@@ -192,12 +299,16 @@ TerminalPane {
             font.pixelSize: Theme.sizeMicro
             font.letterSpacing: Theme.trackMicro
         }
-        Item { Layout.fillWidth: true }
+        // Takes the rest of the row and elides, so a long value never runs
+        // into its label.
         Text {
+            Layout.fillWidth: true
             text: parent.value
             color: Theme.textSecondary
             font.family: Theme.fontMono
             font.pixelSize: Theme.sizeMicro
+            horizontalAlignment: Text.AlignRight
+            elide: Text.ElideLeft
         }
     }
 }
